@@ -25,12 +25,13 @@ build-backend = "uv_build"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Live checks call a real model provider; run them explicitly with `-m live`.
-addopts = "-m 'not live'"
+addopts = "-m 'not live and not compose'"
 asyncio_mode = "auto"
 markers = [
     "unit: fast tests with no external services",
     "integration: needs the compose stack (neo4j, redis) running",
     "live: calls a real model provider and spends rate budget",
+    "compose: needs the full app stack (`docker compose --profile app up`) on localhost:8080",
 ]
 
 [tool.ruff]

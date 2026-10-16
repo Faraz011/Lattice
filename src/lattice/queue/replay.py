@@ -13,6 +13,7 @@ be committed and imported into a fresh database, so the demo-day fallback surviv
 import argparse
 import asyncio
 import json
+import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -24,7 +25,11 @@ from lattice.ids import new_id
 from lattice.queue.events import Event, EventStream
 from lattice.queue.jobs import Keys
 
-RECORDINGS_DIR = Path(__file__).resolve().parents[3] / "recordings"
+# The repo's `recordings/` in a checkout; the image sets LATTICE_RECORDINGS_DIR, because an
+# installed package does not live inside the repo.
+RECORDINGS_DIR = Path(
+    os.environ.get("LATTICE_RECORDINGS_DIR") or Path(__file__).resolve().parents[3] / "recordings"
+)
 
 
 async def save_recording(
@@ -43,10 +48,14 @@ async def _store(
         MERGE (r:Recording {case_id: $case_id})
         ON CREATE SET r.id = $id
         SET r.events_json = $events_json, r.event_count = $count, r.recorded_at = datetime(),
-            r.snapshot_json = coalesce($snapshot_json, r.snapshot_json)
+            r.snapshot_json = coalesce($snapshot_json, r.snapshot_json),
+            r.alert_id = coalesce($alert_id, r.alert_id)
         RETURN r.id AS id
         """,
         case_id=case_id,
+        # Kept on the recording itself, so an imported replay lists under its alert even in a
+        # fresh database that has no Case records.
+        alert_id=((snapshot or {}).get("case") or {}).get("alert_id"),
         id=new_id("recording"),
         events_json=json.dumps(events),
         count=len(events),

@@ -261,11 +261,11 @@ def build_app(host: str = "127.0.0.1"):
     return mcp.streamable_http_app(stateless_http=True, json_response=True, host=host)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="lattice.mcp_server.server")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     uvicorn.run(build_app(args.host), host=args.host, port=args.port)
 
 
