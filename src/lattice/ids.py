@@ -49,6 +49,11 @@ def new_id(kind: str) -> str:
     return f"{_prefix(kind)}_{uuid.uuid4().hex[:16]}"
 
 
+def link_id(rel_type: str, src: str, dst: str) -> str:
+    """Stable ID for relationships that carry no `id` of their own (OWNS, USED_DEVICE)."""
+    return f"{rel_type.lower()}:{src}:{dst}"
+
+
 def kind_of(entity_id: str) -> str:
     prefix, sep, _ = entity_id.partition("_")
     if not sep or prefix not in _KINDS_BY_PREFIX:

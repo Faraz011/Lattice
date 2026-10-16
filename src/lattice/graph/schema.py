@@ -10,6 +10,10 @@ APP_LABELS = ("Case", "LedgerEntry", "Action", "Recording")
 OWNS = "OWNS"
 TRANSFER = "TRANSFER"
 USED_DEVICE = "USED_DEVICE"
+DATA_REL_TYPES = (OWNS, TRANSFER, USED_DEVICE)
+
+# Which data label an ID belongs to, from its prefix kind (see lattice.ids).
+LABEL_BY_KIND = {"customer": "Customer", "account": "Account", "device": "Device", "alert": "Alert"}
 
 _ID_KEYS = {label: "id" for label in DATA_LABELS + APP_LABELS} | {"LedgerEntry": "result_id"}
 
