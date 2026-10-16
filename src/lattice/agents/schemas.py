@@ -75,14 +75,23 @@ class ActionProposal(BaseModel):
 
 
 class Verdict(BaseModel):
-    """The verifier's case-level decision (filled in by U10 onwards)."""
+    """The verifier's case-level decision.
+
+    `suspicious`, `typology` and `risk` come from the risk scorer, the system of record for the
+    decision (KTD7). `investigator_typology` records what the agents concluded, so a
+    disagreement between the two stays visible (R15).
+    """
 
     case_id: str
     suspicious: bool
     typology: Typology | None
+    investigator_typology: Typology | None = None
     risk: Literal["low", "medium", "high"]
+    score: float = Field(ge=0, le=1)
     confidence: float = Field(ge=0, le=1)
     claims: list[Claim] = Field(default_factory=list)
     rejected_citations: list[str] = Field(default_factory=list)
+    unverified_ids: list[str] = Field(default_factory=list)
     needs_review: bool = False
     review_reason: str | None = None
+    notes: list[str] = Field(default_factory=list)
