@@ -23,14 +23,15 @@ class CircuitReport(BaseModel):
     circuit: Circuit
     counterfactuals: CounterfactualResult
     reasons: dict[str, str]
-    # Facts for every edge the report names: the circuit and the counterfactual removals.
+    # Facts for every edge the report names: supporting evidence (which includes the circuit)
+    # and the counterfactual removals.
     edges: list[EdgeDetail]
 
 
 def build_report(graph: EvidenceGraph, scorer: Scorer) -> CircuitReport:
     circuit = find_circuit(graph, scorer)
     counterfactuals = find_counterfactuals(graph, circuit, scorer)
-    named = set(circuit.circuit_edges) | {
+    named = set(circuit.supporting_edges) | {
         e for cf in counterfactuals.counterfactuals for e in cf.removed
     }
     edges = [
