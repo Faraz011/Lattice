@@ -1,0 +1,46 @@
+[project]
+name = "lattice"
+version = "0.1.0"
+description = "AML investigation agents that act on a transaction graph"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "fastapi>=0.143.2",
+    "mcp>=2.3.0",
+    "neo4j>=6.4.1",
+    "networkx>=3.6.1",
+    "pydantic-ai-slim[google,mcp]>=2.57.0",
+    "pydantic-settings>=2.16.0",
+    "redis>=5",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+lattice = "lattice.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.13"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "unit: fast tests with no external services",
+    "integration: needs the compose stack (neo4j, redis) running",
+    "live: calls a real model provider and spends rate budget",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.17.1",
+]
