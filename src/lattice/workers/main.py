@@ -35,6 +35,8 @@ class RoleContext:
 class Role:
     job_type: str
     build_handler: Callable[[RoleContext], Awaitable[Handler]]
+    # Optional work that runs beside the consumer for the life of the process.
+    background: Callable[[RoleContext, asyncio.Event], Awaitable[None]] | None = None
 
 
 async def _echo_handler(ctx: RoleContext) -> Handler:
@@ -66,8 +68,24 @@ async def _verifier_handler(ctx: RoleContext) -> Handler:
     return await build_handler(ctx)
 
 
+async def _orchestrator_handler(ctx: RoleContext) -> Handler:
+    from lattice.workers.orchestrator_worker import build_handler
+
+    return await build_handler(ctx)
+
+
+async def _sweep(ctx: RoleContext, stop: asyncio.Event) -> None:
+    from lattice.graph.client import GraphClient
+    from lattice.workers.sweeper import Sweeper
+
+    async with GraphClient.from_settings(ctx.settings) as graph:
+        await Sweeper(graph, ctx.redis, ctx.keys, ctx.settings).run_forever(stop)
+
+
 ROLES: dict[str, Role] = {
     "echo": Role(job_type="echo", build_handler=_echo_handler),
+    "orchestrator": Role(job_type="investigate", build_handler=_orchestrator_handler,
+                         background=_sweep),
     "investigator": Role(job_type="hypothesis", build_handler=_investigator_handler),
     "verifier": Role(job_type="verify", build_handler=_verifier_handler),
     "action": Role(job_type="execute_action", build_handler=_action_handler),
@@ -97,8 +115,11 @@ async def run(role_name: str, worker_name: str) -> None:
         # Windows has no loop signal handlers; there the process is simply terminated.
         with contextlib.suppress(NotImplementedError):
             asyncio.get_running_loop().add_signal_handler(sig, stop.set)
+    tasks = [asyncio.create_task(consumer.run_forever(stop))]
+    if role.background is not None:
+        tasks.append(asyncio.create_task(role.background(ctx, stop)))
     try:
-        await consumer.run_forever(stop)
+        await asyncio.gather(*tasks)
     finally:
         await client.aclose()
 

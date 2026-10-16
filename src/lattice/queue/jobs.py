@@ -70,3 +70,9 @@ class Keys:
 
     def cache(self, digest: str) -> str:
         return f"{self.namespace}:llm:cache:{digest}"
+
+    def fanin(self, case_id: str, part: str = "meta") -> str:
+        return f"{self.namespace}:fanin:{case_id}:{part}"
+
+    def fanin_deadlines(self) -> str:
+        return f"{self.namespace}:fanin:deadlines"
