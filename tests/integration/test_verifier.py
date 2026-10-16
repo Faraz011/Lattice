@@ -83,6 +83,15 @@ async def test_agreement_on_a_planted_chain_awaits_approval_with_a_blast_radius(
     assert action["tier"] >= 2 and action["status"] == "proposed"
     assert action["target_id"] == case["seed_account_id"]
     assert action["blast_radius"]["account_count"] > 0
+    circuit = verdict["circuit"]["circuit"]
+    cited = {r for c in verdict["verdict"]["claims"] for r in c["rel_ids"]}
+    assert circuit["status"] == "circuit"
+    assert circuit["circuit_edges"] and set(circuit["circuit_edges"]) <= cited
+    assert circuit["sufficiency_score"] >= load_settings().risk_threshold
+    assert verdict["narrative"]["source"] == "template"
+    assert circuit["typology"] in verdict["narrative"]["text"]
+    stored = await CaseStore(graph).get(case["id"])
+    assert stored["circuit"] and stored["narrative"]
 
 
 async def test_a_fabricated_citation_is_dropped_and_listed(
@@ -143,6 +152,8 @@ async def test_a_decoy_the_investigators_wrongly_support_goes_to_review(
     assert updated["status"] == "needs_review"
     assert "disagree" in updated["status_reason"]
     assert await ActionStore(graph).for_case(case["id"]) == []
+    # A flagged verdict still reports its circuit, honestly: below the threshold, none drawn.
+    assert verdict["circuit"]["circuit"]["status"] == "below_threshold"
 
 
 async def test_a_partial_finding_still_contributes_its_citations(
