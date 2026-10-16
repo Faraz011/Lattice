@@ -7,6 +7,7 @@ import time
 import pytest
 import uvicorn
 from mcp.server.mcpserver import Context, MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic_ai import ModelResponse, ToolCallPart
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.function import AgentInfo, FunctionModel
@@ -30,6 +31,11 @@ async def graph_neighbors(node_id: str, ctx: Context) -> dict:
     headers = {k.lower(): v for k, v in (ctx.headers or {}).items()}
     calls.append({"args": {"node_id": node_id}, "case_id": headers.get(CASE_HEADER)})
     return {"result_id": f"led_{len(calls)}", "node_ids": [node_id], "rel_ids": ["tx_1"]}
+
+
+@fake.tool(name="graph_get_node", description="One node.")
+async def graph_get_node(node_id: str) -> dict:
+    raise ToolError(f"no node with id {node_id}")
 
 
 @pytest.fixture(scope="module")
@@ -117,6 +123,24 @@ async def test_tool_calls_carry_the_injected_case_id_which_the_model_never_suppl
     assert "case_id" not in schema.get("properties", {})
 
 
+async def test_repeated_tool_errors_are_shown_to_the_model_without_ending_the_run(mcp_url):
+    errors_seen = 0
+
+    def script(messages, info: AgentInfo) -> ModelResponse:
+        nonlocal errors_seen
+        errors_seen = sum("no node with id" in str(m) for m in messages)
+        if errors_seen < 4:
+            return ModelResponse(parts=[ToolCallPart("graph_get_node", {"node_id": "acct_bad"})])
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, REPORT)])
+
+    runtime = AgentRuntime(settings(), mcp_url=mcp_url)
+    outcome = await runtime.run("investigator", "case_abc", "go", FindingReport, partial,
+                                model=FunctionModel(script), step_budget=10)
+
+    assert outcome.status == "complete"
+    assert errors_seen >= 4
+
+
 async def test_reaching_the_step_budget_returns_a_partial_finding(mcp_url):
     def never_finishes(messages, info: AgentInfo) -> ModelResponse:
         return ModelResponse(parts=[ToolCallPart("graph_neighbors", {"node_id": "acct_1"})])
@@ -141,6 +165,20 @@ async def test_an_exhausted_rate_budget_returns_a_partial_result_instead_of_rais
     assert outcome.status == "budget_exhausted"
     assert outcome.output.status == "partial"
     assert "rate budget" in outcome.output.status_reason
+
+
+async def test_runs_that_report_tool_events_still_go_through_the_rate_limiter(mcp_url):
+    seen: list = []
+
+    async def on_tool_event(event):
+        seen.append(event)
+
+    runtime = AgentRuntime(settings(), mcp_url=mcp_url, limiter=AlwaysExhausted())
+    outcome = await runtime.run("investigator", "case_abc", "go", FindingReport, partial,
+                                model=TestModel(), on_tool_event=on_tool_event)
+
+    assert outcome.status == "budget_exhausted"
+    assert calls == []  # no model request got through, so no tool was called
 
 
 async def test_output_that_keeps_failing_the_schema_ends_as_a_typed_failure():
