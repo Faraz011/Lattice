@@ -14,6 +14,9 @@ import time
 import httpx
 import pytest
 
+from lattice.config import load_settings
+from lattice.eval.fixture_check import release
+
 pytestmark = pytest.mark.compose
 
 API = "http://localhost:8080"
@@ -71,6 +74,7 @@ async def test_a_planted_alert_reaches_approval_within_the_target(fixture_world)
         assert actions and actions[0]["blast_radius"]["account_count"] > 0
         recording = await http.get(f"/cases/{case_id}/recording")
         assert recording.status_code == 200
+        await release(http, case_id, load_settings().approver_token.get_secret_value())
 
 
 async def test_losing_an_investigator_mid_case_still_yields_a_verdict(fixture_world):
@@ -84,6 +88,7 @@ async def test_losing_an_investigator_mid_case_still_yields_a_verdict(fixture_wo
             case = await wait_for(http, case_id, FINAL, E2E_TARGET_S)
         finally:
             compose("up", "-d", "--no-deps", "investigator")
+        await release(http, case_id, load_settings().approver_token.get_secret_value())
 
         assert case["verdict"] is not None
         assert case["status"] in FINAL
