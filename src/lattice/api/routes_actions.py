@@ -3,9 +3,9 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from lattice.api.routes_alerts import _public
 from lattice.api.state import Api, Approver
 from lattice.cases.actions import ActionStateError, UnknownAction
+from lattice.cases.views import public, record_case
 from lattice.queue.jobs import Job
 
 router = APIRouter()
@@ -27,7 +27,7 @@ async def approve(action_id: str, who: Approver, api: Api) -> dict:
                                     {"action_id": action_id}))
     await api.events.publish(action["case_id"], "action_approved",
                              {"action_id": action_id, "by": who})
-    return {"action": _public(action)}
+    return {"action": public(action)}
 
 
 @router.post("/actions/{action_id}/reject")
@@ -45,4 +45,5 @@ async def reject(action_id: str, who: Approver, api: Api,
         await api.cases.transition(case["id"], "rejected", reason)
     await api.events.publish(action["case_id"], "action_rejected",
                              {"action_id": action_id, "by": who, "reason": reason})
-    return {"action": _public(action)}
+    await record_case(api.graph, api.events, action["case_id"])
+    return {"action": public(action)}

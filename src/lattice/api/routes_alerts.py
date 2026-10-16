@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from lattice.api.state import Api
 from lattice.cases.dispatch import first_job
 from lattice.cases.store import CapExceeded, UnknownAlert
+from lattice.cases.views import public
 
 router = APIRouter()
 
@@ -46,12 +47,4 @@ async def investigate(
                                  {"alert_id": alert_id, "mode": mode})
         await api.queue.enqueue(first_job(case))
     return JSONResponse(status_code=201 if created else 200,
-                        content={"case": _public(case), "created": created})
-
-
-def _public(case: dict) -> dict:
-    out = {k: v for k, v in case.items() if k != "active_key"}
-    for key in ("created_at", "updated_at"):
-        if key in out and hasattr(out[key], "to_native"):
-            out[key] = out[key].to_native().isoformat()
-    return out
+                        content={"case": public(case), "created": created})

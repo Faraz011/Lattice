@@ -38,7 +38,7 @@ async def cases(graph):
 
     yield start
     await graph.write(
-        "MATCH (n) WHERE (n:Case AND n.id IN $ids) OR ((n:Action OR n:LedgerEntry) "
+        "MATCH (n) WHERE (n:Case AND n.id IN $ids) OR ((n:Action OR n:LedgerEntry OR n:Recording) "
         "AND n.case_id IN $ids) DETACH DELETE n", ids=created)
 
 

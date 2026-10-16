@@ -43,7 +43,8 @@ async def created(graph):
     ids: list[str] = []
     yield ids
     await graph.write(
-        "MATCH (n) WHERE (n:Case AND n.id IN $ids) OR (n:Action AND n.case_id IN $ids) "
+        "MATCH (n) WHERE (n:Case AND n.id IN $ids) "
+        "OR ((n:Action OR n:LedgerEntry OR n:Recording) AND n.case_id IN $ids) "
         "DETACH DELETE n", ids=ids)
 
 
@@ -109,20 +110,21 @@ async def test_past_the_active_case_cap_a_new_investigation_is_refused(
 ):
     active = (await graph.read(
         "MATCH (c:Case) WHERE c.active_key IS NOT NULL RETURN count(c) AS n"))[0]["n"]
+    refused_alert = alert_of(fixture_world, "peeling_chain").alert_id
+    count = "MATCH (c:Case {alert_id: $a}) RETURN count(c) AS n"
+    before = (await graph.read(count, a=refused_alert))[0]["n"]
     base, stop = serve_app(create_app(settings.model_copy(
         update={"max_active_cases": active + 1})))
     try:
         allowed = await start(base, alert_of(fixture_world, "fan_in_structuring").alert_id,
                               created)
-        refused = await start(base, alert_of(fixture_world, "peeling_chain").alert_id, created)
+        refused = await start(base, refused_alert, created)
     finally:
         stop()
 
     assert allowed.status_code == 201
     assert refused.status_code == 429
-    rows = await graph.read("MATCH (c:Case {alert_id: $a}) RETURN count(c) AS n",
-                            a=alert_of(fixture_world, "peeling_chain").alert_id)
-    assert rows[0]["n"] == 0
+    assert (await graph.read(count, a=refused_alert))[0]["n"] == before
 
 
 async def test_an_unknown_alert_is_not_found(api, created):

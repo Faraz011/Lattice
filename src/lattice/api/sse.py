@@ -5,7 +5,9 @@ from collections.abc import AsyncIterator
 
 from lattice.queue.events import EventStream
 
-BLOCK_MS = 15_000
+# Each wait must end inside the Redis client's socket timeout (5 s by default in redis-py 8),
+# or the read fails and the stream drops. A quiet case gets a keep-alive comment each wait.
+BLOCK_MS = 3_000
 
 
 async def case_events(events: EventStream, case_id: str, after: str = "0-0") -> AsyncIterator[str]:

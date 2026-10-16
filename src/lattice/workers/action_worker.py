@@ -7,6 +7,7 @@ refused and the refusal is recorded on the case.
 from lattice.cases.actions import ActionStore
 from lattice.cases.policy import execution_refusal
 from lattice.cases.store import CaseStore
+from lattice.cases.views import record_case
 from lattice.graph.client import GraphClient
 from lattice.queue.events import EventStream
 from lattice.queue.jobs import Job
@@ -26,6 +27,7 @@ def make_handler(graph: GraphClient, events: EventStream) -> Handler:
                 await actions.mark_refused(action, refusal)
             await events.publish(job.case_id, "action_refused",
                                  {"action_id": action["id"], "reason": refusal})
+            await record_case(graph, events, job.case_id)
             return
 
         executed = await actions.mark_executed(action)
@@ -34,6 +36,7 @@ def make_handler(graph: GraphClient, events: EventStream) -> Handler:
             await cases.transition(case["id"], "actioned", executed["outcome"])
         await events.publish(job.case_id, "action_executed",
                              {"action_id": action["id"], "outcome": executed["outcome"]})
+        await record_case(graph, events, job.case_id)
 
     return handle
 
