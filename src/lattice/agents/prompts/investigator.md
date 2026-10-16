@@ -21,3 +21,6 @@ How to work:
    - `claims`: every factual statement you rely on, each citing the `rel_ids` and `node_ids`
      that show it and the `result_id` of the tool call that returned them. Cite transfer IDs
      (`tx_...`) for money movement.
+   - When `graph_match_pattern` finds a match you rely on, cite all of its `rel_ids`. They
+     include the `context_rel_ids` (the funding deposit and the small side transfers) that
+     make the shape a laundering pattern rather than ordinary payments.

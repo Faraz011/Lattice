@@ -216,6 +216,10 @@ class PatternMatch(BaseModel):
     counterparties: int
     total_amount: float
     span_hours: float
+    # Edges around the core shape that make it what it is: the deposit that funds a fan-out
+    # or a chain, the small skims at each chain hop, the onward transfer after a fan-in.
+    # They are also in `rel_ids`, so citing a match cites the whole pattern.
+    context_rel_ids: list[str] = []
 
 
 class PatternResult(ToolResult):
@@ -262,6 +266,7 @@ async def match_pattern(
             """,
             {"id": node_id, "gap": max_gap_hours, "ratio": min_forward_ratio,
              "limit": _clamp(limit, 1, 20)},
+            chain_context=True,
         )
     return PatternResult(
         pattern=pattern,
@@ -307,20 +312,43 @@ async def _fan(
     if len({r["other"] for r in best}) < min_count:
         return []
     others = unique([r["other"] for r in best])
+    total = sum(r["amount"] for r in best)
+    if pattern == "fan_out":  # the deposit that funded the payouts
+        context = await graph.read(
+            """
+            MATCH (src)-[t:TRANSFER]->(n:Account {id: $id})
+            WHERE t.ts >= $first - duration({hours: 48}) AND t.ts <= $first
+              AND t.amount >= 0.5 * $total
+            RETURN t.id AS id, src.id AS other ORDER BY t.amount DESC, t.id LIMIT 1
+            """,
+            id=node_id, first=best[0]["ts"], total=total,
+        )
+    else:  # where the collected money went next
+        context = await graph.read(
+            """
+            MATCH (n:Account {id: $id})-[t:TRANSFER]->(dst)
+            WHERE t.ts >= $last AND t.ts <= $last + duration({days: 3})
+              AND t.amount >= 0.5 * $total
+            RETURN t.id AS id, dst.id AS other ORDER BY t.amount DESC, t.id LIMIT 1
+            """,
+            id=node_id, last=best[-1]["ts"], total=total,
+        )
+    context_ids = [r["id"] for r in context]
     return [
         PatternMatch(
-            node_ids=[node_id, *others],
-            rel_ids=[r["id"] for r in best],
+            node_ids=unique([node_id, *others, *(r["other"] for r in context)]),
+            rel_ids=[r["id"] for r in best] + context_ids,
             transfer_count=len(best),
             counterparties=len(others),
-            total_amount=round(sum(r["amount"] for r in best), 2),
+            total_amount=round(total, 2),
             span_hours=round((best[-1]["ts"] - best[0]["ts"]).total_seconds() / 3600, 2),
+            context_rel_ids=context_ids,
         )
     ]
 
 
 async def _paths_as_matches(
-    graph: GraphClient, query: str, params: dict[str, Any]
+    graph: GraphClient, query: str, params: dict[str, Any], chain_context: bool = False
 ) -> list[PatternMatch]:
     records, _ = await graph.read_records(query, params, timeout=15, max_rows=params["limit"])
     matches = []
@@ -328,17 +356,51 @@ async def _paths_as_matches(
         path: Path = record["p"]
         times = [r["ts"].to_native() for r in path.relationships]
         view = path_view(path)
+        context: list[dict[str, Any]] = []
+        if chain_context:
+            context = await _chain_context(graph, path, view)
+        context_ids = [c["id"] for c in context]
         matches.append(
             PatternMatch(
-                node_ids=unique(view.node_ids),
-                rel_ids=view.rel_ids,
+                node_ids=unique([*view.node_ids, *(c["other"] for c in context)]),
+                rel_ids=view.rel_ids + context_ids,
                 transfer_count=len(view.rel_ids),
                 counterparties=len(set(view.node_ids)) - 1,
                 total_amount=round(sum(r["amount"] for r in path.relationships), 2),
                 span_hours=round((max(times) - min(times)).total_seconds() / 3600, 2),
+                context_rel_ids=context_ids,
             )
         )
     return matches
+
+
+async def _chain_context(graph: GraphClient, path: Path, view: PathView) -> list[dict[str, Any]]:
+    """The deposit that started a chain and the small side transfers skimmed at each hop."""
+    hops = [
+        {"node": view.node_ids[i], "ts": r["ts"], "amount": r["amount"]}
+        for i, r in enumerate(path.relationships)
+    ]
+    return await graph.read(
+        """
+        CALL () {
+          WITH $hops[0] AS first
+          MATCH (src)-[t:TRANSFER]->(:Account {id: first.node})
+          WHERE t.ts >= first.ts - duration({hours: 48}) AND t.ts <= first.ts
+            AND t.amount >= first.amount
+          RETURN t.id AS id, src.id AS other ORDER BY t.amount DESC, t.id LIMIT 1
+          UNION
+          UNWIND $hops AS hop
+          MATCH (:Account {id: hop.node})-[t:TRANSFER]->(dst)
+          WHERE NOT t.id IN $path_rels
+            AND t.ts >= hop.ts - duration({hours: 48}) AND t.ts <= hop.ts + duration({hours: 48})
+            AND t.amount <= 0.12 * hop.amount
+          RETURN t.id AS id, dst.id AS other
+        }
+        RETURN id, other ORDER BY id
+        """,
+        hops=hops,
+        path_rels=view.rel_ids,
+    )
 
 
 # --- graph_cypher_readonly ----------------------------------------------------------------

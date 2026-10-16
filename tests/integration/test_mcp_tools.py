@@ -129,6 +129,34 @@ async def test_match_pattern_finds_structuring_deposits(ctx, fixture_world):
     assert len(deposits) >= 10
 
 
+async def test_a_chain_match_carries_the_opening_deposit_and_the_skims(ctx, fixture_world):
+    case = case_of(fixture_world, "peeling_chain")
+    transfers = {t.id: t for t in fixture_world.batch.transfers}
+    deposit = next(transfers[t] for t in case.transfer_ids
+                   if transfers[t].dst == case.seed_account_id)
+    forwards = {t.id for t in forward_chain(fixture_world, case)}
+    skims = set(case.transfer_ids) - forwards - {deposit.id}
+
+    result = await tools_graph.match_pattern(ctx.graph, "chain", case.seed_account_id)
+
+    best = result.matches[0]
+    assert deposit.id in best.context_rel_ids
+    assert skims <= set(best.context_rel_ids)
+    assert set(case.transfer_ids) <= set(best.rel_ids)
+
+
+async def test_a_fan_out_match_carries_the_funding_deposit(ctx, fixture_world):
+    case = case_of(fixture_world, "fan_out")
+    deposit = next(t for t in fixture_world.batch.transfers
+                   if t.dst == case.seed_account_id and t.id in set(case.transfer_ids))
+
+    result = await tools_graph.match_pattern(ctx.graph, "fan_out", case.seed_account_id,
+                                             min_count=8)
+
+    assert result.matches[0].context_rel_ids == [deposit.id]
+    assert set(case.transfer_ids) <= set(result.rel_ids)
+
+
 async def test_match_pattern_finds_a_round_trip_cycle(ctx, fixture_world):
     case = case_of(fixture_world, "round_trip")
 
