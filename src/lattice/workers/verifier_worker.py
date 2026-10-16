@@ -8,13 +8,16 @@ Steps for one verify job:
 """
 
 import json
+from collections.abc import Awaitable, Callable
 from typing import Any
 
+from lattice.agents.narrator import Narrative, template_narrative
 from lattice.agents.schemas import Finding
 from lattice.cases.actions import ActionStore
 from lattice.cases.store import CaseStore
 from lattice.config import Settings
 from lattice.explain.citations import check_against_ledger, load_ledger, reverify
+from lattice.explain.report import CircuitReport, build_report
 from lattice.explain.verdict import Outcome, decide
 from lattice.graph.client import GraphClient
 from lattice.graph.subgraph import load_evidence
@@ -23,6 +26,8 @@ from lattice.queue.events import EventStream
 from lattice.queue.jobs import Job
 from lattice.queue.streams import Handler
 from lattice.scoring.scorer import Scorer
+
+Narrate = Callable[[str, CircuitReport], Awaitable[Narrative]]
 
 # How a case reaches `verifying` from wherever it is.
 ROUTE_TO_VERIFYING = {
@@ -33,7 +38,13 @@ ROUTE_TO_VERIFYING = {
 }
 
 
-def make_handler(graph: GraphClient, events: EventStream, settings: Settings) -> Handler:
+async def _template(case_id: str, report: CircuitReport) -> Narrative:
+    return Narrative(text=template_narrative(report), source="template")
+
+
+def make_handler(
+    graph: GraphClient, events: EventStream, settings: Settings, narrate: Narrate = _template
+) -> Handler:
     cases, actions = CaseStore(graph), ActionStore(graph)
     scorer = Scorer.from_settings(settings)
 
@@ -51,17 +62,34 @@ def make_handler(graph: GraphClient, events: EventStream, settings: Settings) ->
         kept, unverified = await reverify(graph, kept)
 
         cited = list(dict.fromkeys(r for c in kept for r in c.rel_ids))
-        score = scorer.score(await load_evidence(graph, cited))
+        evidence = await load_evidence(graph, cited)
+        score = scorer.score(evidence)
         outcome = decide(case["id"], findings, score, scorer.threshold, rejected, unverified,
                          kept)
 
-        await graph.write("MATCH (c:Case {id: $id}) SET c.verdict = $verdict",
-                          id=case["id"], verdict=outcome.verdict.model_dump_json())
+        # Flagged verdicts carry the evidence circuit and its explanation (R13, R14).
+        report = narrative = None
+        if outcome.status != "closed_no_action":
+            report = build_report(evidence, scorer)
+            narrative = await narrate(case["id"], report)
+
+        await graph.write(
+            """
+            MATCH (c:Case {id: $id})
+            SET c.verdict = $verdict, c.circuit = $circuit, c.narrative = $narrative
+            """,
+            id=case["id"],
+            verdict=outcome.verdict.model_dump_json(),
+            circuit=report.model_dump_json() if report else None,
+            narrative=narrative.model_dump_json() if narrative else None,
+        )
         await events.publish(case["id"], "verdict", {
             "outcome": outcome.status,
             "verdict": outcome.verdict.model_dump(mode="json"),
             "score": {"score": score.score, "typology": score.typology,
                       "detectors": score.detectors, "reasons": score.reasons},
+            "circuit": report.model_dump(mode="json") if report else None,
+            "narrative": narrative.model_dump(mode="json") if narrative else None,
         })
 
         if outcome.status == "awaiting_approval":
@@ -97,5 +125,22 @@ async def _propose(
 
 
 async def build_handler(ctx) -> Handler:
-    graph = GraphClient.from_settings(ctx.settings)  # lives as long as the worker process
-    return make_handler(graph, ctx.events, ctx.settings)
+    from lattice.agents.narrator import narrate
+    from lattice.agents.runtime import AgentRuntime
+    from lattice.queue.llm_cache import LLMCache
+    from lattice.queue.ratelimit import RateLimiter
+
+    settings = ctx.settings
+    graph = GraphClient.from_settings(settings)  # lives as long as the worker process
+    runtime = AgentRuntime(
+        settings,
+        mcp_url=None,  # the narrator writes from the report alone
+        limiter=RateLimiter(ctx.redis, ctx.keys.limiter(), settings.llm_requests_per_minute,
+                            settings.llm_requests_per_day),
+        cache=LLMCache(ctx.redis, ctx.keys, settings.llm_cache_ttl_s, settings.llm_cache_enabled),
+    )
+
+    async def narrate_case(case_id: str, report: CircuitReport) -> Narrative:
+        return await narrate(runtime, case_id, report)
+
+    return make_handler(graph, ctx.events, settings, narrate_case)
