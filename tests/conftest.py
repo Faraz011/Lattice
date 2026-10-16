@@ -9,5 +9,5 @@ def pytest_collection_modifyitems(items):
     """Mark tests by folder so `pytest -m unit` and `-m integration` select them."""
     for item in items:
         folder = Path(item.fspath).relative_to(TESTS_DIR).parts[0]
-        if folder in ("unit", "integration"):
+        if folder in ("unit", "integration", "live"):
             item.add_marker(getattr(pytest.mark, folder))

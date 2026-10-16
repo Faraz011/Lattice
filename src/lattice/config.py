@@ -20,9 +20,12 @@ class Settings(BaseSettings):
     approver_token: SecretStr
 
     mcp_url: str = "http://localhost:8000/mcp"
-    # Model string understood by Pydantic AI; the exact Gemini model is settled in U6.
-    model: str = "google-gla:gemini-2.5-flash"
+    # "<provider>:<model>" as Pydantic AI names them; the alias tracks the current Gemini Flash.
+    model: str = "google:gemini-flash-latest"
+    # Per-role overrides, e.g. {"verifier": "anthropic:claude-sonnet-5-5"} (R10, KTD1).
+    role_models: dict[str, str] = Field(default_factory=dict)
     gemini_api_key: SecretStr | None = None
+    anthropic_api_key: SecretStr | None = None
     llm_requests_per_minute: int = Field(default=10, ge=1)
     llm_requests_per_day: int = Field(default=1_500, ge=1)
     llm_wait_timeout_s: float = Field(default=90, ge=0)

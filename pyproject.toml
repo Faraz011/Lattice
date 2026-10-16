@@ -9,7 +9,7 @@ dependencies = [
     "mcp>=2.3.0",
     "neo4j>=6.4.1",
     "networkx>=3.6.1",
-    "pydantic-ai-slim[google,mcp]>=2.57.0",
+    "pydantic-ai-slim[anthropic,google,mcp]>=2.57.0",
     "pydantic-settings>=2.16.0",
     "redis>=5",
     "uvicorn[standard]>=0.54.0",
@@ -24,6 +24,8 @@ build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Live checks call a real model provider; run them explicitly with `-m live`.
+addopts = "-m 'not live'"
 asyncio_mode = "auto"
 markers = [
     "unit: fast tests with no external services",
