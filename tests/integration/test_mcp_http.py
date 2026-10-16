@@ -1,17 +1,13 @@
 """End to end over Streamable HTTP: a real server process and a real MCP client."""
 
-import socket
-import threading
-import time
 import uuid
 
 import httpx2
 import pytest
-import uvicorn
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 
-from lattice.mcp_server.server import CASE_HEADER, build_app
+from lattice.mcp_server.server import CASE_HEADER
 
 SURFACE = {
     "graph_schema", "graph_get_node", "graph_neighbors", "graph_find_paths",
@@ -21,21 +17,8 @@ SURFACE = {
 
 
 @pytest.fixture(scope="module")
-def server_url(fixture_world):
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        port = s.getsockname()[1]
-    server = uvicorn.Server(uvicorn.Config(build_app(), host="127.0.0.1", port=port,
-                                           log_level="warning"))
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    deadline = time.time() + 20
-    while not server.started:
-        assert time.time() < deadline, "MCP server did not start"
-        time.sleep(0.05)
-    yield f"http://127.0.0.1:{port}/mcp"
-    server.should_exit = True
-    thread.join(timeout=10)
+def server_url(mcp_server_url):
+    return mcp_server_url
 
 
 def client(url: str, case_id: str | None):

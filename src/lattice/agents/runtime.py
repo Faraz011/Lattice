@@ -9,7 +9,8 @@
   typed partial or failed result instead of an exception.
 """
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Generic, Literal, Protocol, TypeVar
@@ -22,7 +23,7 @@ from pydantic_ai import (
     UsageLimits,
 )
 from pydantic_ai.mcp import MCPToolset
-from pydantic_ai.messages import ModelMessage, ModelResponse
+from pydantic_ai.messages import HandleResponseEvent, ModelMessage, ModelResponse
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.settings import ModelSettings
@@ -38,6 +39,7 @@ _VOLATILE = frozenset({"timestamp", "run_id", "conversation_id", "tool_call_id",
                        "provider_response_id", "provider_details", "usage"})
 
 T = TypeVar("T")
+ToolEventHandler = Callable[[HandleResponseEvent], Awaitable[None]]
 
 
 class Limiter(Protocol):
@@ -102,6 +104,12 @@ class BudgetedModel(WrapperModel):
             await self._cache.put(key, ModelMessagesTypeAdapter.dump_json([response]).decode())
         return response
 
+    @asynccontextmanager
+    async def request_stream(self, *args: Any, **kwargs: Any) -> AsyncIterator[Any]:
+        # Streaming would go straight to the wrapped model, past the cache and the limiter.
+        raise NotImplementedError("Lattice agents never stream model responses")
+        yield
+
 
 def _tool_schema(params: ModelRequestParameters) -> list[dict[str, Any]]:
     tools = [*params.function_tools, *params.output_tools]
@@ -146,7 +154,10 @@ class AgentRuntime:
         base = model or build_model(model_for_role(role, self._settings), self._settings)
         toolsets = []
         if self._mcp_url:
-            toolsets.append(MCPToolset(self._mcp_url, headers={CASE_HEADER: case_id}))
+            # "failed": a tool error (unknown ID, rejected Cypher) goes back to the model as a
+            # result it can read and recover from, instead of a retry that ends the run.
+            toolsets.append(MCPToolset(self._mcp_url, headers={CASE_HEADER: case_id},
+                                       tool_error_behavior="failed"))
         return Agent(
             BudgetedModel(base, self._limiter, self._cache, self._settings.llm_wait_timeout_s),
             output_type=output_type,
@@ -165,12 +176,23 @@ class AgentRuntime:
         *,
         model: Model | None = None,
         step_budget: int | None = None,
+        on_tool_event: ToolEventHandler | None = None,
     ) -> RunOutcome[Any]:
-        """Run one agent to a typed result. `partial(reason, status)` builds the fallback."""
+        """Run one agent to a typed result. `partial(reason, status)` builds the fallback.
+
+        `on_tool_event` receives each tool call and tool result as it happens, for live
+        progress. Model requests themselves are never streamed (see `BudgetedModel`).
+        """
         agent = self.build_agent(role, case_id, output_type, model)
         limits = UsageLimits(request_limit=step_budget or self._settings.investigation_step_budget)
         try:
-            result = await agent.run(prompt, usage_limits=limits)
+            async with agent.iter(prompt, usage_limits=limits) as agent_run:
+                async for node in agent_run:
+                    if on_tool_event and Agent.is_call_tools_node(node):
+                        async with node.stream(agent_run.ctx) as events:
+                            async for event in events:
+                                await on_tool_event(event)
+            result = agent_run.result
         except UsageLimitExceeded as exc:
             reason = f"step budget reached ({exc})"
             return RunOutcome(partial(reason), "budget_exhausted", reason)
