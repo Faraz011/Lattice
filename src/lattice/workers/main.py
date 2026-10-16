@@ -54,9 +54,16 @@ async def _investigator_handler(ctx: RoleContext) -> Handler:
     return await build_handler(ctx)
 
 
+async def _action_handler(ctx: RoleContext) -> Handler:
+    from lattice.workers.action_worker import build_handler
+
+    return await build_handler(ctx)
+
+
 ROLES: dict[str, Role] = {
     "echo": Role(job_type="echo", build_handler=_echo_handler),
     "investigator": Role(job_type="hypothesis", build_handler=_investigator_handler),
+    "action": Role(job_type="execute_action", build_handler=_action_handler),
 }
 
 

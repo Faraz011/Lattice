@@ -47,6 +47,12 @@ def serve_in_thread(app):
 
 
 @pytest.fixture(scope="session")
+def serve_app():
+    """Start an ASGI app on a free port: `base_url, stop = serve_app(app)`."""
+    return serve_in_thread
+
+
+@pytest.fixture(scope="session")
 def fixture_world():
     """The seed-7 fixture world, loaded into Neo4j once per test session (loading is idempotent)."""
     world = generate_world(seed=FIXTURE_SEED, size="fixture")
