@@ -24,6 +24,15 @@ class Settings(BaseSettings):
     model: str = "google-gla:gemini-2.5-flash"
     gemini_api_key: SecretStr | None = None
     llm_requests_per_minute: int = Field(default=10, ge=1)
+    llm_requests_per_day: int = Field(default=1_500, ge=1)
+    llm_wait_timeout_s: float = Field(default=90, ge=0)
+    llm_cache_enabled: bool = True
+    llm_cache_ttl_s: int = Field(default=7 * 24 * 3600, ge=1)
+    redis_namespace: str = "lattice"
+    # Reclaim stalled jobs after this long; must stay below the U11 hypothesis deadline.
+    job_idle_timeout_s: float = Field(default=30, gt=0)
+    job_heartbeat_s: float = Field(default=10, gt=0)
+    job_max_attempts: int = Field(default=3, ge=1)
     investigation_step_budget: int = Field(default=12, ge=1)
     risk_threshold: float = Field(default=0.6, gt=0, lt=1)
 
