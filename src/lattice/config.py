@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     job_max_attempts: int = Field(default=3, ge=1)
     investigation_step_budget: int = Field(default=12, ge=1)
     risk_threshold: float = Field(default=0.6, gt=0, lt=1)
+    # Per-detector weights for the risk scorer; detectors not named keep weight 1.0 (KTD7).
+    detector_weights: dict[str, float] = Field(default_factory=dict)
 
 
 def load_settings(env_file: str | None = ".env") -> Settings:
