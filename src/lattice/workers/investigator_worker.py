@@ -1,7 +1,9 @@
 """Investigator role: consume hypothesis jobs and publish one finding event per job.
 
 Every job ends in a finding event, partial or failed included, so fan-in never waits on a
-hypothesis that silently died. In single-agent mode the worker also enqueues verification.
+hypothesis that silently died. Then the finding moves on:
+- single-agent mode: straight to the verifier;
+- orchestrated mode: into the case's fan-in, and to the verifier when the set is complete.
 """
 
 from collections.abc import Awaitable, Callable
@@ -10,45 +12,62 @@ from typing import Any, Protocol
 from lattice.agents.investigator import OnEvent, investigate
 from lattice.agents.runtime import AgentRuntime
 from lattice.agents.schemas import Finding, HypothesisBrief
+from lattice.cases.dispatch import Enqueuer, hand_off_to_verifier
 from lattice.queue.jobs import Job
 from lattice.queue.llm_cache import LLMCache
 from lattice.queue.ratelimit import RateLimiter
 from lattice.queue.streams import Handler
 
 Investigate = Callable[[HypothesisBrief, OnEvent], Awaitable[Finding]]
+SaveFindings = Callable[[str, list[Finding]], Awaitable[None]]
 
 
 class Publisher(Protocol):
     async def publish(self, case_id: str, event_type: str, data: dict[str, Any]) -> Any: ...
 
 
-class Enqueuer(Protocol):
-    async def enqueue(self, job: Job) -> Any: ...
+class FanInRecorder(Protocol):
+    async def record(self, case_id: str, hypothesis: str, finding: Finding) -> bool: ...
+    async def collect(self, case_id: str) -> list[Finding]: ...
 
 
-def make_handler(run_investigation: Investigate, events: Publisher, queue: Enqueuer) -> Handler:
+def make_handler(
+    run_investigation: Investigate,
+    events: Publisher,
+    queue: Enqueuer,
+    *,
+    fanin: FanInRecorder | None = None,
+    save_findings: SaveFindings | None = None,
+    worker: str | None = None,
+) -> Handler:
     async def handle(job: Job) -> None:
         brief = HypothesisBrief.model_validate(job.payload["brief"])
-        await events.publish(job.case_id, "investigation_started",
-                             {"job_id": job.job_id, "hypothesis": brief.hypothesis})
+        started = {"job_id": job.job_id, "hypothesis": brief.hypothesis}
+        if worker:
+            started["worker"] = worker
+        await events.publish(job.case_id, "investigation_started", started)
 
         async def on_event(kind: str, data: dict[str, Any]) -> None:
             await events.publish(job.case_id, kind, {**data, "hypothesis": brief.hypothesis})
 
         finding = await run_investigation(brief, on_event)
-        dumped = finding.model_dump(mode="json")
         await events.publish(job.case_id, "finding", {"job_id": job.job_id,
                                                       "hypothesis": brief.hypothesis,
-                                                      "finding": dumped})
+                                                      "finding": finding.model_dump(mode="json")})
         if job.payload.get("single_agent"):
-            await queue.enqueue(Job.new("verify", case_id=job.case_id,
-                                        payload={"findings": [dumped]}))
+            await hand_off_to_verifier(save_findings, queue, job.case_id, [finding])
+        elif fanin is not None and await fanin.record(job.case_id, brief.hypothesis, finding):
+            findings = await fanin.collect(job.case_id)
+            await hand_off_to_verifier(save_findings, queue, job.case_id, findings)
 
     return handle
 
 
 async def build_handler(ctx) -> Handler:
     """Wire the real runtime: MCP tools, shared rate limiter and response cache."""
+    from lattice.cases.store import CaseStore
+    from lattice.graph.client import GraphClient
+    from lattice.queue.fanin import FanIn
     from lattice.queue.streams import JobQueue
 
     settings = ctx.settings
@@ -59,8 +78,11 @@ async def build_handler(ctx) -> Handler:
                             settings.llm_requests_per_day),
         cache=LLMCache(ctx.redis, ctx.keys, settings.llm_cache_ttl_s, settings.llm_cache_enabled),
     )
+    store = CaseStore(GraphClient.from_settings(settings))
 
     async def run_investigation(brief: HypothesisBrief, on_event: OnEvent) -> Finding:
         return await investigate(runtime, brief, on_event=on_event)
 
-    return make_handler(run_investigation, ctx.events, JobQueue(ctx.redis, ctx.keys))
+    return make_handler(run_investigation, ctx.events, JobQueue(ctx.redis, ctx.keys),
+                        fanin=FanIn(ctx.redis, ctx.keys), save_findings=store.save_findings,
+                        worker=ctx.worker_name)

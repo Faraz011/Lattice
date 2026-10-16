@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     job_idle_timeout_s: float = Field(default=30, gt=0)
     job_heartbeat_s: float = Field(default=10, gt=0)
     job_max_attempts: int = Field(default=3, ge=1)
+    # Orchestrated cases verify with whatever findings arrived once this deadline passes.
+    hypothesis_deadline_s: float = Field(default=300, gt=0)
+    # The sweeper redispatches cases and approved actions untouched for this long.
+    case_stall_timeout_s: float = Field(default=900, gt=0)
+    sweep_interval_s: float = Field(default=15, gt=0)
     investigation_step_budget: int = Field(default=12, ge=1)
     risk_threshold: float = Field(default=0.6, gt=0, lt=1)
     # Per-detector weights for the risk scorer; detectors not named keep weight 1.0 (KTD7).

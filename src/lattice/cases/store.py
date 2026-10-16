@@ -6,6 +6,7 @@ constraint on it makes "start an investigation" atomic and idempotent per alert.
 
 from typing import Any
 
+from lattice.agents.schemas import Finding
 from lattice.cases.policy import TERMINAL_STATES, check_transition
 from lattice.graph.client import GraphClient
 from lattice.ids import new_id
@@ -103,6 +104,33 @@ class CaseStore:
         if not rows:  # someone else moved it first
             return await self.transition(case_id, target, reason)
         return dict(rows[0]["c"])
+
+    async def save_findings(self, case_id: str, findings: list[Finding]) -> None:
+        payload = "[" + ",".join(f.model_dump_json() for f in findings) + "]"
+        await self._graph.write("MATCH (c:Case {id: $id}) SET c.findings = $findings",
+                                id=case_id, findings=payload)
+
+    async def saved_findings(self, case_id: str) -> list[Finding]:
+        import json
+
+        case = await self.get(case_id)
+        return [Finding.model_validate(f) for f in json.loads(case.get("findings") or "[]")]
+
+    async def stalled(self, statuses: list[str], older_than_s: float) -> list[dict[str, Any]]:
+        rows = await self._graph.read(
+            """
+            MATCH (c:Case) WHERE c.status IN $statuses
+              AND c.updated_at < datetime() - duration({seconds: $s})
+            RETURN c ORDER BY c.updated_at
+            """,
+            statuses=statuses,
+            s=older_than_s,
+        )
+        return [dict(r["c"]) for r in rows]
+
+    async def touch(self, case_id: str) -> None:
+        await self._graph.write("MATCH (c:Case {id: $id}) SET c.updated_at = datetime()",
+                                id=case_id)
 
     async def list_alerts(self) -> list[dict[str, Any]]:
         return await self._graph.read(

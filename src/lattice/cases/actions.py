@@ -45,6 +45,21 @@ class ActionStore:
         )
         return [await self.get(r["id"]) for r in rows]
 
+    async def stalled_approved(self, older_than_s: float) -> list[dict[str, Any]]:
+        rows = await self._graph.read(
+            """
+            MATCH (a:Action {status: 'approved'})
+            WHERE a.updated_at < datetime() - duration({seconds: $s})
+            RETURN a.id AS id
+            """,
+            s=older_than_s,
+        )
+        return [await self.get(r["id"]) for r in rows]
+
+    async def touch(self, action_id: str) -> None:
+        await self._graph.write("MATCH (a:Action {id: $id}) SET a.updated_at = datetime()",
+                                id=action_id)
+
     async def set_blast_radius(self, action_id: str, impact: dict[str, Any]) -> None:
         await self._graph.write(
             "MATCH (a:Action {id: $id}) SET a.blast_radius = $impact",
