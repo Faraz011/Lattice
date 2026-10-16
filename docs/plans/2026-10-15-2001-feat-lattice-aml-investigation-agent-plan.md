@@ -91,7 +91,7 @@ Lattice answers this by grounding explanations in graph facts it can replay and 
 - R20. The whole system starts locally with one compose command and deploys to Render as separate services from one blueprint.
 
 **Depth (after cut line)**
-- R21. An evaluation run reports decision accuracy, recall of planted edges by circuits, sufficiency and comprehensiveness rates, the hallucinated-citation rate, tool-call statistics, and cost and latency per case.
+- R21. An evaluation run reports decision accuracy, recall of planted edges by supporting evidence, sufficiency and comprehensiveness rates, the hallucinated-citation rate, tool-call statistics, and cost and latency per case.
 - R22. A slice of the Elliptic2 Bitcoin dataset loads into the same schema and supports structural investigations.
 - R23. (Stretch) An interpretability panel shows an attribution graph explaining an open model's tool choice on a sample investigation step.
 
@@ -107,7 +107,7 @@ Lattice answers this by grounding explanations in graph facts it can replay and 
 
 These are target thresholds on synthetic data. They are not unit-level gates. Before submission, U19 measures them on a small held-out world. After the cut line, U15 measures them on the larger demo world.
 - Planted cases are flagged at or above 80%, and decoys are wrongly flagged at or below 20%.
-- Evidence circuits on correctly flagged planted cases keep at least 70% of their edges inside the planted pattern (precision), and recover at least 60% of the planted pattern's edges (recall).
+- Evidence circuits on correctly flagged planted cases keep at least 70% of their edges inside the planted pattern (precision). Their supporting evidence (every edge a firing detector used, which includes the circuit) recovers at least 60% of the planted pattern's edges (recall). Recall is measured on supporting evidence because the circuit is deliberately minimal: it keeps only enough edges to prove the verdict.
 - Final verdicts contain zero citations of IDs that no tool returned.
 - One end-to-end investigation finishes within 5 minutes on the Gemini free tier, and within 1 minute on a paid key.
 - In a live demo, a viewer can go from alert to an approved action without leaving the UI.
@@ -820,6 +820,7 @@ flowchart TB
   - The counterfactual search is bounded: single edges, then pairs among the top-attributed edges up to a configured cap.
   - The report holds:
     - circuit edges,
+    - supporting edges (every edge a firing detector used; the circuit is a subset),
     - the sufficiency score,
     - the comprehensiveness result,
     - a redundancy flag,
@@ -937,7 +938,7 @@ flowchart TB
   - **Metrics:**
     - flag rate on planted cases,
     - decoy false-positive rate,
-    - circuit precision and recall against the manifest,
+    - circuit precision and supporting-evidence recall against the manifest,
     - sufficiency and comprehensiveness rates,
     - unledgered citations in final verdicts,
     - whether each injection twin pair reaches the same verdict.
@@ -971,7 +972,7 @@ flowchart TB
   - Joins verdicts and circuits against the manifest.
   - Reports:
     - detection and decoy false-positive rates,
-    - circuit precision and recall against planted edges,
+    - circuit precision and supporting-evidence recall against planted edges,
     - sufficiency and comprehensiveness rates,
     - rejected-citation counts,
     - tool-call distribution per role,

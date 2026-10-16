@@ -6,6 +6,10 @@
    still score at or above the threshold. What survives is the minimal sufficient circuit.
 3. Comprehensiveness: the evidence minus the circuit must fall below the threshold. When it
    does not, a second independent body of evidence exists, and that is reported, not hidden.
+
+Alongside the minimal circuit, `supporting_edges` lists every edge a firing detector used: the
+whole pattern as the scorer saw it. The circuit is the proof; the supporting edges are context,
+and recall against a known pattern is measured on them.
 """
 
 from typing import Literal
@@ -23,6 +27,7 @@ class Circuit(BaseModel):
     typology: str | None
     detectors: dict[str, float]
     circuit_edges: list[str]
+    supporting_edges: list[str]
     sufficiency_score: float
     remaining_score: float
     comprehensive: bool
@@ -45,7 +50,8 @@ def find_circuit(graph: EvidenceGraph, scorer: Scorer) -> Circuit:
     if full.score < scorer.threshold:
         return Circuit(status="below_threshold", threshold=scorer.threshold,
                        full_score=full.score, typology=full.typology, detectors=full.detectors,
-                       circuit_edges=[], sufficiency_score=0.0, remaining_score=full.score,
+                       circuit_edges=[], supporting_edges=[], sufficiency_score=0.0,
+                       remaining_score=full.score,
                        comprehensive=False, redundant=False, attribution=attribution)
 
     kept = set(graph.edge_ids())
@@ -56,6 +62,8 @@ def find_circuit(graph: EvidenceGraph, scorer: Scorer) -> Circuit:
 
     order = {edge: i for i, edge in enumerate(graph.edge_ids())}
     circuit_edges = sorted(kept, key=lambda e: order[e])
+    used = {e for e, contribution in full.edge_contributions.items() if contribution > 0}
+    supporting_edges = sorted(used | kept, key=lambda e: order[e])
     sufficiency = scorer.score(graph.only(kept)).score
     remaining = scorer.score(graph.without(kept)).score
     return Circuit(
@@ -65,6 +73,7 @@ def find_circuit(graph: EvidenceGraph, scorer: Scorer) -> Circuit:
         typology=full.typology,
         detectors=full.detectors,
         circuit_edges=circuit_edges,
+        supporting_edges=supporting_edges,
         sufficiency_score=sufficiency,
         remaining_score=remaining,
         comprehensive=remaining < scorer.threshold,
