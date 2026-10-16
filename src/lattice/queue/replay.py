@@ -18,6 +18,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import redis.asyncio as redis
+from neo4j.exceptions import ConstraintError
 
 from lattice.config import load_settings
 from lattice.graph.client import GraphClient
@@ -42,6 +43,16 @@ async def save_recording(
 
 async def _store(
     graph: GraphClient, case_id: str, events: list[dict], snapshot: dict | None = None
+) -> str:
+    try:
+        return await _merge(graph, case_id, events, snapshot)
+    except ConstraintError:
+        # Another save created the node between our MERGE's match and create; now it matches.
+        return await _merge(graph, case_id, events, snapshot)
+
+
+async def _merge(
+    graph: GraphClient, case_id: str, events: list[dict], snapshot: dict | None
 ) -> str:
     rows = await graph.write(
         """

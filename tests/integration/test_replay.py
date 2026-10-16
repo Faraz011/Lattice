@@ -1,9 +1,11 @@
 """Durable replay recordings: events copied from Redis into Neo4j and out to JSON files."""
 
+import asyncio
 import uuid
 
 import pytest
 
+from lattice.graph.schema import apply_schema
 from lattice.queue.events import EventStream
 from lattice.queue.replay import (
     export_recording,
@@ -75,3 +77,14 @@ async def test_saving_twice_replaces_the_recording_rather_than_duplicating_it(ca
     rows = await graph.read("MATCH (r:Recording {case_id: $c}) RETURN count(r) AS n", c=case)
     assert rows[0]["n"] == 1
     assert (await collect(case, graph))[-1][0] == "action_executed"
+
+
+async def test_concurrent_saves_of_one_case_keep_a_single_recording(case, redis_client, keys,
+                                                                      graph):
+    await apply_schema(graph)  # as the API and seed do at start-up
+    events = EventStream(redis_client, keys)
+
+    await asyncio.gather(*(save_recording(graph, events, case) for _ in range(6)))
+
+    rows = await graph.read("MATCH (r:Recording {case_id: $c}) RETURN count(r) AS n", c=case)
+    assert rows[0]["n"] == 1

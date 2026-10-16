@@ -56,6 +56,10 @@ class FanIn:
     async def exists(self, case_id: str) -> bool:
         return bool(await self._redis.exists(self._k(case_id, "meta")))
 
+    async def handed_off(self, case_id: str) -> bool:
+        """The set completed (or its deadline passed) and verification was enqueued."""
+        return bool(await self._redis.exists(self._k(case_id, "sent")))
+
     async def record(self, case_id: str, hypothesis: str, finding: Finding) -> bool:
         """Store a finding; True when this call completed the set and must hand off."""
         keys = [self._k(case_id, p) for p in ("meta", "received", "findings", "sent")]

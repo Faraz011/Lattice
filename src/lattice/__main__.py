@@ -52,7 +52,11 @@ def api(argv: list[str]) -> int:
 def mcp(argv: list[str]) -> int:
     from lattice.mcp_server.server import main as serve
 
-    serve(argv or ["--host", "0.0.0.0", "--port", os.environ.get("PORT", "8000")])
+    parser = argparse.ArgumentParser(prog="lattice mcp")
+    parser.add_argument("--host", default="0.0.0.0")  # noqa: S104 - it runs in a container
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
+    args = parser.parse_args(argv)
+    serve(["--host", args.host, "--port", str(args.port)])
     return 0
 
 

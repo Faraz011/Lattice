@@ -201,6 +201,22 @@ async def test_verifying_the_same_case_twice_does_not_propose_twice(
     assert len(await ActionStore(graph).for_case(case["id"])) == 1
 
 
+async def test_a_verify_job_redelivered_mid_way_reuses_the_open_proposal(
+    graph, redis_client, keys, fixture_world, cases
+):
+    case = await cases(record_of(fixture_world, "peeling_chain"))
+    finding = await chain_finding(graph, fixture_world, case)
+    await verify(graph, redis_client, keys, case["id"], [finding])
+    # The worker died after proposing but before the case left `verifying`.
+    await graph.write("MATCH (c:Case {id: $id}) SET c.status = 'verifying'", id=case["id"])
+
+    updated, _ = await verify(graph, redis_client, keys, case["id"], [finding])
+
+    assert updated["status"] == "awaiting_approval"
+    (action,) = await ActionStore(graph).for_case(case["id"])
+    assert action["status"] == "proposed" and action["blast_radius"]
+
+
 async def test_single_agent_path_from_alert_to_awaiting_approval(
     graph, redis_client, keys, fixture_world, cases, mcp_server_url
 ):

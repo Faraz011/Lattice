@@ -3,9 +3,11 @@
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
 
+from lattice.agents.schemas import Verdict
 from lattice.api.sse import case_events
 from lattice.api.state import Api, Approver
 from lattice.cases.policy import InvalidTransition
+from lattice.cases.proposals import propose_for_case
 from lattice.cases.store import UnknownCase
 from lattice.cases.views import case_evidence, case_view, public, record_case
 from lattice.queue.replay import load_recording, load_snapshot
@@ -67,6 +69,10 @@ async def _review(api: Api, case_id: str, target: str, who: str) -> dict:
         case = await api.cases.get(case_id)
         if case["status"] != "needs_review":
             raise InvalidTransition(f"case is {case['status']}, not needs_review")
+        if target == "awaiting_approval":
+            # Escalation needs something to approve: propose before the case waits on it.
+            await propose_for_case(api.graph, api.events, case, _verdict(case),
+                                   f"escalated for approval by {who} after review")
         updated = await api.cases.transition(case_id, target, f"review decision by {who}")
     except UnknownCase as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -76,6 +82,11 @@ async def _review(api: Api, case_id: str, target: str, who: str) -> dict:
     if target == "closed_no_action":
         await record_case(api.graph, api.events, case_id)
     return {"case": case_view(updated)}
+
+
+def _verdict(case: dict) -> Verdict | None:
+    raw = case.get("verdict")
+    return Verdict.model_validate_json(raw) if raw else None
 
 
 @router.post("/cases/{case_id}/escalate")
