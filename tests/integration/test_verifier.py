@@ -30,7 +30,7 @@ async def cases(graph):
 
     yield start
     await graph.write(
-        "MATCH (n) WHERE (n:Case AND n.id IN $ids) OR ((n:Action OR n:LedgerEntry) "
+        "MATCH (n) WHERE (n:Case AND n.id IN $ids) OR ((n:Action OR n:LedgerEntry OR n:Recording) "
         "AND n.case_id IN $ids) DETACH DELETE n", ids=created)
 
 
@@ -154,6 +154,26 @@ async def test_a_decoy_the_investigators_wrongly_support_goes_to_review(
     assert await ActionStore(graph).for_case(case["id"]) == []
     # A flagged verdict still reports its circuit, honestly: below the threshold, none drawn.
     assert verdict["circuit"]["circuit"]["status"] == "below_threshold"
+
+
+async def test_a_refuted_decoy_closes_with_its_score_as_the_reason(
+    graph, redis_client, keys, fixture_world, cases
+):
+    case = await cases(record_of(fixture_world, "payroll_fan_out", category="decoy"))
+    seed = case["seed_account_id"]
+    result = await ledgered(graph, case["id"],
+                            lambda: tools_graph.neighbors(graph, seed, direction="out",
+                                                          rel_types=["TRANSFER"]),
+                            tool="graph_neighbors")
+
+    updated, _ = await verify(graph, redis_client, keys, case["id"],
+                              [finding_from(result, "fan_out", "refutes")])
+
+    assert updated["status"] == "closed_no_action"
+    assert "below the 0.60 threshold" in updated["status_reason"]
+    recorded = await graph.read("MATCH (r:Recording {case_id: $c}) RETURN r.event_count AS n",
+                                c=case["id"])
+    assert recorded and recorded[0]["n"] >= 2  # every verdict is saved for replay
 
 
 async def test_a_partial_finding_still_contributes_its_citations(

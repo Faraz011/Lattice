@@ -5,6 +5,7 @@ Steps for one verify job:
 2. Keep only claims whose citations are ledgered (R12) and still exist in the graph.
 3. Score the cited evidence and decide the outcome with the findings (R15).
 4. For a suspicious verdict: compute the blast radius and propose a tier 2-3 action (R16).
+5. Save the case's replay recording.
 """
 
 import json
@@ -15,6 +16,7 @@ from lattice.agents.narrator import Narrative, template_narrative
 from lattice.agents.schemas import Finding
 from lattice.cases.actions import ActionStore
 from lattice.cases.store import CaseStore
+from lattice.cases.views import record_case
 from lattice.config import Settings
 from lattice.explain.citations import check_against_ledger, load_ledger, reverify
 from lattice.explain.report import CircuitReport, build_report
@@ -94,10 +96,19 @@ def make_handler(
 
         if outcome.status == "awaiting_approval":
             await _propose(graph, actions, events, case, outcome)
-        await cases.transition(case["id"], outcome.status,
-                               outcome.verdict.review_reason or f"verdict: {outcome.status}")
+        await cases.transition(case["id"], outcome.status, _reason(outcome, scorer.threshold))
+        await record_case(graph, events, case["id"])  # every verdict can be replayed
 
     return handle
+
+
+def _reason(outcome: Outcome, threshold: float) -> str:
+    if outcome.verdict.review_reason:
+        return outcome.verdict.review_reason
+    if outcome.status == "closed_no_action":
+        return (f"the cited evidence scores {outcome.verdict.score:.2f}, below the "
+                f"{threshold:.2f} threshold")
+    return f"{outcome.verdict.typology} pattern scores {outcome.verdict.score:.2f}"
 
 
 async def _propose(
@@ -126,12 +137,16 @@ async def _propose(
 
 async def build_handler(ctx) -> Handler:
     from lattice.agents.narrator import narrate
+    from lattice.agents.provider import model_for_role
     from lattice.agents.runtime import AgentRuntime
+    from lattice.agents.scripted import SCRIPTED
     from lattice.queue.llm_cache import LLMCache
     from lattice.queue.ratelimit import RateLimiter
 
     settings = ctx.settings
     graph = GraphClient.from_settings(settings)  # lives as long as the worker process
+    if model_for_role("narrator", settings) == SCRIPTED:
+        return make_handler(graph, ctx.events, settings)  # the template writes the narrative
     runtime = AgentRuntime(
         settings,
         mcp_url=None,  # the narrator writes from the report alone
