@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     llm_cache_enabled: bool = True
     llm_cache_ttl_s: int = Field(default=7 * 24 * 3600, ge=1)
     redis_namespace: str = "lattice"
+    # Caps on new investigations, so a public demo URL cannot drain the model budget (KTD2).
+    max_active_cases: int = Field(default=5, ge=1)
+    max_cases_per_day: int = Field(default=50, ge=1)
+    # Origins allowed to call the API from a browser (the demo UI).
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
     # Reclaim stalled jobs after this long; must stay below the U11 hypothesis deadline.
     job_idle_timeout_s: float = Field(default=30, gt=0)
     job_heartbeat_s: float = Field(default=10, gt=0)

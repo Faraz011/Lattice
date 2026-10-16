@@ -27,6 +27,10 @@ STATEMENTS = [
     f"FOR ()-[r:{TRANSFER}]-() REQUIRE r.id IS UNIQUE",
     f"CREATE INDEX transfer_ts IF NOT EXISTS FOR ()-[r:{TRANSFER}]-() ON (r.ts)",
     "CREATE INDEX case_status IF NOT EXISTS FOR (c:Case) ON (c.status)",
+    # One open case per alert: active_key is the alert ID while open, null once closed.
+    "CREATE CONSTRAINT case_active_key IF NOT EXISTS FOR (c:Case) REQUIRE c.active_key IS UNIQUE",
+    "CREATE INDEX case_alert IF NOT EXISTS FOR (c:Case) ON (c.alert_id)",
+    "CREATE INDEX action_case IF NOT EXISTS FOR (a:Action) ON (a.case_id)",
     "CREATE INDEX ledger_case IF NOT EXISTS FOR (l:LedgerEntry) ON (l.case_id)",
 ]
 
