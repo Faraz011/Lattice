@@ -124,11 +124,11 @@ async def run(role_name: str, worker_name: str) -> None:
         await client.aclose()
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="lattice.workers.main")
     parser.add_argument("role", choices=sorted(ROLES))
     parser.add_argument("--name", default=f"{socket.gethostname()}-{os.getpid()}")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     configure_logging()
     asyncio.run(run(args.role, args.name))
 

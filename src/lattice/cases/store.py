@@ -140,7 +140,7 @@ class CaseStore:
             WITH a, c ORDER BY c.created_at DESC
             WITH a, collect(c)[0] AS latest
             OPTIONAL MATCH (r:Recording)
-              WHERE EXISTS { MATCH (:Case {id: r.case_id, alert_id: a.id}) }
+              WHERE r.alert_id = a.id OR EXISTS { MATCH (:Case {id: r.case_id, alert_id: a.id}) }
             WITH a, latest, r ORDER BY r.recorded_at DESC
             WITH a, latest, collect(r.case_id)[0] AS recorded
             RETURN a.id AS id, a.seed_account_id AS seed_account_id, a.reason AS reason,

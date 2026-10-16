@@ -70,3 +70,20 @@ def test_secrets_are_not_shown_in_repr(clean_env):
 
     assert "secret-pw" not in repr(settings)
     assert "approver-token" not in repr(settings)
+
+
+@pytest.mark.parametrize(("given", "neo4j", "mcp"), [
+    ("lattice-neo4j", "bolt://lattice-neo4j:7687", "http://lattice-neo4j:8000/mcp"),
+    ("lattice-neo4j:7688", "bolt://lattice-neo4j:7688", "http://lattice-neo4j:7688/mcp"),
+    ("neo4j+s://db.example:7687", "neo4j+s://db.example:7687", "neo4j+s://db.example:7687"),
+])
+def test_bare_hosts_from_render_get_a_scheme_and_default_port(clean_env, given, neo4j, mcp):
+    for name, value in REQUIRED.items():
+        clean_env.setenv(name, value)
+    clean_env.setenv("LATTICE_NEO4J_URI", given)
+    clean_env.setenv("LATTICE_MCP_URL", given)
+
+    settings = load_settings(env_file=None)
+
+    assert settings.neo4j_uri == neo4j
+    assert settings.mcp_url == mcp

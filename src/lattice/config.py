@@ -1,6 +1,6 @@
 """Typed settings for every Lattice role, read from LATTICE_* environment variables."""
 
-from pydantic import Field, SecretStr, ValidationError
+from pydantic import Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ENV_PREFIX = "LATTICE_"
@@ -50,6 +50,21 @@ class Settings(BaseSettings):
     risk_threshold: float = Field(default=0.6, gt=0, lt=1)
     # Per-detector weights for the risk scorer; detectors not named keep weight 1.0 (KTD7).
     detector_weights: dict[str, float] = Field(default_factory=dict)
+
+    # Render passes a private service's address as a bare host, with no scheme or port.
+    @field_validator("neo4j_uri")
+    @classmethod
+    def _neo4j_scheme(cls, value: str) -> str:
+        if "://" in value:
+            return value
+        return f"bolt://{value if ':' in value else f'{value}:7687'}"
+
+    @field_validator("mcp_url")
+    @classmethod
+    def _mcp_scheme(cls, value: str) -> str:
+        if "://" in value:
+            return value
+        return f"http://{value if ':' in value else f'{value}:8000'}/mcp"
 
 
 def load_settings(env_file: str | None = ".env") -> Settings:

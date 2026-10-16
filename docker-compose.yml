@@ -1,3 +1,29 @@
+# Infrastructure starts by default (`docker compose up -d`), which is what local development and
+# the test suite use. The application roles sit behind the `app` profile:
+#
+#   docker compose --profile app up -d --build
+#   docker compose --profile app up -d --scale investigator=3   # more investigators, same queue
+#
+# Without a model key, run the agents offline: LATTICE_MODEL=scripted docker compose --profile app up
+
+x-lattice: &lattice
+  image: lattice:local
+  pull_policy: never  # built once, by the seed service below
+  profiles: ["app"]
+  env_file: .env
+  restart: unless-stopped
+  environment: &lattice-env
+    LATTICE_NEO4J_URI: bolt://neo4j:7687
+    LATTICE_REDIS_URL: redis://redis:6379/0
+    LATTICE_MCP_URL: http://mcp:8000/mcp
+    LATTICE_MODEL: ${LATTICE_MODEL:-google:gemini-flash-latest}
+    LATTICE_CORS_ORIGINS: '["http://localhost:${LATTICE_UI_PORT:-8081}"]'
+  depends_on: &lattice-deps
+    neo4j:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
 services:
   neo4j:
     image: neo4j:2026.09.0-community
@@ -31,6 +57,66 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  seed:
+    <<: *lattice
+    build: .
+    pull_policy: build
+    command: ["lattice", "seed", "--if-empty"]
+    restart: "no"
+
+  mcp:
+    <<: *lattice
+    command: ["lattice", "mcp", "--host", "0.0.0.0", "--port", "8000"]
+
+  api:
+    <<: *lattice
+    command: ["lattice", "api", "--port", "8080"]
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      <<: *lattice-deps
+      seed:
+        condition: service_completed_successfully
+
+  orchestrator:
+    <<: *lattice
+    command: ["lattice", "worker", "orchestrator"]
+
+  investigator:
+    <<: *lattice
+    command: ["lattice", "worker", "investigator"]
+    deploy:
+      replicas: 2
+    depends_on:
+      <<: *lattice-deps
+      mcp:
+        condition: service_started
+
+  verifier:
+    <<: *lattice
+    command: ["lattice", "worker", "verifier"]
+
+  action:
+    <<: *lattice
+    command: ["lattice", "worker", "action"]
+
+  ui:
+    profiles: ["app"]
+    build:
+      context: ui
+      args:
+        VITE_API_URL: http://localhost:8080
+    ports:
+      - "${LATTICE_UI_PORT:-8081}:80"
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   neo4j-data:
