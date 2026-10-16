@@ -143,7 +143,7 @@ These are target thresholds on synthetic data. They are not unit-level gates. Be
   - Every worker takes a token from a shared rate limiter in Redis before each model call.
   - Responses are cached by a hash of model, messages and tool schema.
   - Each investigation carries a step budget.
-  - A recorded-run replay mode lets the UI play back a captured investigation if live calls are throttled on demo day.
+  - A recorded-run replay mode lets the UI play back a captured investigation if live calls are throttled on demo day. Recordings are durable (KTD5): a Redis restart must never delete the demo fallback.
   - Why: third-party trackers put the free tier for Flash models at about 10 requests/minute and about 1,500/day, and Pro models left the free tier in April 2026. Verify against the AI Studio rate-limit console, because parallel investigators multiply calls.
   - Governs R11.
 - KTD3. **Workers coordinate through Redis Streams consumer groups.**
@@ -157,7 +157,12 @@ These are target thresholds on synthetic data. They are not unit-level gates. Be
   - Typed tools were chosen because research shows LocAgent-style purpose-built tools beat free-form query generation.
   - The server, not the agent, writes the ledger entry for each call (R5). The agent therefore cannot fabricate or skip provenance.
   - The case ID is injected by the agent runtime, not chosen by the model.
-- KTD5. **Case records and the evidence ledger live in Neo4j under their own labels.** This avoids adding a separate application database. Ledger entries store result ID, case ID, tool, parameters, timestamp, and the returned node and relationship IDs. The data labels and the app labels never share a GDS projection. Transient orchestration state (fan-in counters, deadlines) lives in Redis.
+- KTD5. **Case records and the evidence ledger live in Neo4j under their own labels.** This avoids adding a separate application database. Ledger entries store result ID, case ID, tool, parameters, timestamp, and the returned node and relationship IDs.
+  - **Replay recordings** are stored durably as `Recording` nodes linked to their case, holding the ordered event list.
+    - They are written when a case reaches a terminal state, or on demand.
+    - Recordings also export to and import from JSON files under `recordings/`, committed to the repo, so the demo fallback survives a database reset or a fresh Render deploy.
+    - Redis holds only the live event stream.
+  - The data labels and the app labels never share a GDS projection. Transient orchestration state (fan-in counters, deadlines) lives in Redis.
 - KTD6. **Stable IDs are application-level string properties with uniqueness constraints.** Neo4j's internal element IDs can be reused, so agents, ledger, scorer and UI never use them (R2). Relationship IDs (`TRANSFER.id`) are first-class because evidence circuits are edge sets.
 - KTD7. **The risk scorer is a pure, deterministic function over an in-memory subgraph.** (session-settled: user-approved — chosen over a trained classifier: transparent and cheap enough to rerun thousands of times for ablation.)
   - The scorer combines typology detectors (peeling chain, fan-in/structuring, fan-out, cycle/round-trip, rapid layering, shared device, exit to exchange or mixer).
@@ -287,11 +292,13 @@ erDiagram
   ACCOUNT }o--o{ DEVICE : used
   CASE ||--o{ LEDGER_ENTRY : records
   CASE ||--o{ ACTION : proposes
+  CASE ||--o| RECORDING : replays
   CASE }o--|| ALERT : starts_from
   ACCOUNT { string id string kind string created_at string country }
   TRANSFER { string id float amount string ts string channel string memo }
   LEDGER_ENTRY { string result_id string tool string params string node_ids string rel_ids string ts }
   ACTION { string id int tier string kind string status string blast_radius }
+  RECORDING { string id string case_id string events_json string recorded_at }
 ```
 
 `TRANSFER` is a relationship between accounts in the property graph. The ERD shows it as an entity because its properties matter.
@@ -580,6 +587,8 @@ flowchart TB
   - `src/lattice/queue/llm_cache.py`
   - `src/lattice/queue/replay.py`
   - `src/lattice/workers/main.py`
+  - `recordings/.gitkeep`
+  - `tests/integration/test_replay.py`
   - `tests/integration/test_streams.py`
   - `tests/integration/test_ratelimit.py`
   - `tests/unit/test_jobs.py`
@@ -589,7 +598,7 @@ flowchart TB
   - **Heartbeat:** a worker re-claims its own in-flight job on a heartbeat shorter than the reclaim idle timeout, so a long LLM-bound job is never reclaimed while alive. The idle timeout is configured below the U11 hypothesis deadline.
   - **The limiter** is an atomic token bucket in Redis shared by all workers. A model call waits up to a bound, then reports "budget exhausted".
   - **The cache** is keyed by a hash of model, messages and tool schema, with a TTL. It can be disabled.
-  - **Replay** stores a case's ordered event stream for later playback.
+  - **Replay** copies a case's ordered event stream from Redis into a durable `Recording` node in Neo4j (KTD5). A CLI exports recordings to JSON under `recordings/` and imports them back.
   - **`workers/main.py`** picks the role from a CLI argument and runs that role's handler.
 - **Test scenarios:**
   - Two consumers in one group each receive distinct jobs, and no job is delivered to both.
@@ -601,6 +610,8 @@ flowchart TB
   - An acquisition that waits past its bound returns budget-exhausted rather than blocking forever.
   - A cache hit returns the stored response without calling the model. Changing the tool schema misses the cache.
   - Replaying a recorded case emits its events in their original order.
+  - A recording saved for a finished case still replays after Redis is flushed.
+  - Exporting a recording to JSON and importing it into an empty database replays identically.
 - **Verification:** Integration tests pass against compose Redis, and starting two copies of a dummy role shares one stream.
 
 ### U6. Model-neutral agent runtime
@@ -1056,7 +1067,7 @@ Unit tests never call a live model. They use Pydantic AI's deterministic test mo
 - A planted alert runs end to end on compose: orchestrator → parallel investigators → verifier → circuit → proposal → approval → simulated action. The run is visible live in the UI.
 - A decoy alert closes without action or goes to review, with a stated reason.
 - An injection-memo case reaches the same verdict as its memo-free twin.
-- A recorded replay of the demo case plays in the UI without live model calls.
+- A recorded replay of the demo case plays in the UI without live model calls. Its JSON export is committed under `recordings/`, so a fresh deploy can import it.
 
 **Per unit**
 - The unit's test scenarios exist and pass, and its Verification outcome has been observed.
