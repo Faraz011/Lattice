@@ -198,6 +198,33 @@ async def test_cypher_readonly_extracts_ids_from_nodes_and_strings(ctx, fixture_
     assert result.node_ids == [account.id]
 
 
+@pytest.mark.parametrize("query", [
+    "MATCH (n:Case) RETURN n",
+    "MATCH (n) WHERE 'LedgerEntry' IN labels(n) RETURN n",
+    "MATCH (n:`Action`) RETURN n.status",
+    "MATCH (n: Recording) RETURN n.case_id",
+    "MATCH (n) WHERE n.case_id IS NOT NULL RETURN properties(n)",
+    "MATCH (n:Account|Case) RETURN n LIMIT 5",
+    "MATCH (a:Account) WITH a LIMIT 1 MATCH (n) RETURN keys(n) LIMIT 5",
+])
+async def test_cypher_readonly_cannot_reach_application_records(ctx, query):
+    with pytest.raises(tools_graph.CypherRejected):
+        await tools_graph.cypher_readonly(ctx.graph, query)
+
+
+async def test_cypher_readonly_still_answers_ordinary_graph_questions(ctx, fixture_world):
+    seed = case_of(fixture_world, "fan_out").seed_account_id
+
+    result = await tools_graph.cypher_readonly(
+        ctx.graph,
+        "MATCH (a:Account {id: $id})-[t:TRANSFER]->(b:Account) "
+        "RETURN b.id AS id, t.amount AS amount, CASE WHEN t.amount > 1000 THEN 'big' END AS size",
+        params={"id": seed},
+    )
+
+    assert result.rows
+
+
 # --- ledger and case context --------------------------------------------------------------
 
 

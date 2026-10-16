@@ -42,6 +42,9 @@ T = TypeVar("T")
 ToolEventHandler = Callable[[HandleResponseEvent], Awaitable[None]]
 
 
+# MCP tools no agent may call. Proposing an action is the verifier's job, after scoring.
+AGENT_HIDDEN_TOOLS = frozenset({"case_propose_action"})
+
 class Limiter(Protocol):
     async def acquire(self, timeout: float) -> bool: ...
 
@@ -156,8 +159,10 @@ class AgentRuntime:
         if self._mcp_url:
             # "failed": a tool error (unknown ID, rejected Cypher) goes back to the model as a
             # result it can read and recover from, instead of a retry that ends the run.
-            toolsets.append(MCPToolset(self._mcp_url, headers={CASE_HEADER: case_id},
-                                       tool_error_behavior="failed"))
+            mcp = MCPToolset(self._mcp_url, headers={CASE_HEADER: case_id},
+                             tool_error_behavior="failed")
+            # Agents investigate; only the verifier and reviewers propose actions (R16).
+            toolsets.append(mcp.filtered(lambda _ctx, tool: tool.name not in AGENT_HIDDEN_TOOLS))
         return Agent(
             BudgetedModel(base, self._limiter, self._cache, self._settings.llm_wait_timeout_s),
             output_type=output_type,

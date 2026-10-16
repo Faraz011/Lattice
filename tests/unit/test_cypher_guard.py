@@ -1,6 +1,6 @@
 import pytest
 
-from lattice.mcp_server.cypher_guard import CypherRejected, check_readonly
+from lattice.mcp_server.cypher_guard import CypherRejected, check_plan, check_readonly
 
 
 @pytest.mark.parametrize(
@@ -50,3 +50,21 @@ def test_rejection_names_the_offending_clause():
 def test_rejection_names_the_disallowed_procedure():
     with pytest.raises(CypherRejected, match="apoc.create.node"):
         check_readonly("CALL apoc.create.node(['A'], {})")
+
+
+def test_a_plan_that_scans_every_node_is_refused():
+    with pytest.raises(CypherRejected, match="labelled data node"):
+        check_plan(["ProduceResults@neo4j n", "AllNodesScan@neo4j n"])
+
+
+@pytest.mark.parametrize("detail", ["n:Case", "n:`LedgerEntry`", "n:Account|Action",
+                                    "UNIQUE r:Recording(id) WHERE id = $id"])
+def test_a_plan_touching_an_application_label_is_refused(detail):
+    with pytest.raises(CypherRejected, match="not readable"):
+        check_plan([f"NodeByLabelScan@neo4j {detail}"])
+
+
+def test_a_plan_over_data_labels_passes():
+    check_plan(["ProduceResults@neo4j a", "Expand(All)@neo4j (a)-[t:TRANSFER]->(b)",
+                "NodeUniqueIndexSeek@neo4j UNIQUE a:Account(id) WHERE id = $id",
+                "Projection@neo4j CASE WHEN t.amount > 1 THEN 'x' END AS size"])

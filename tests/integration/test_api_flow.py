@@ -271,6 +271,31 @@ async def test_clearing_a_review_case_needs_the_token(api, fixture_world, create
     assert (await cases.get(case_id))["status"] == "closed_no_action"
 
 
+async def test_escalating_a_review_case_proposes_an_action_to_approve(
+    api, fixture_world, created, graph
+):
+    record = alert_of(fixture_world, "peeling_chain")
+    case_id = (await start(api, record.alert_id, created)).json()["case"]["id"]
+    cases = CaseStore(graph)
+    await cases.transition(case_id, "investigating", "test")
+    await cases.transition(case_id, "needs_review", "investigators and scorer disagree")
+
+    async with httpx.AsyncClient(base_url=api) as http:
+        escalated = await http.post(f"/cases/{case_id}/escalate",
+                                    headers={"X-Approver-Token": TOKEN})
+        again = await http.post(f"/cases/{case_id}/escalate",
+                                headers={"X-Approver-Token": TOKEN})
+
+    assert escalated.status_code == 200
+    assert again.status_code == 409
+    assert (await cases.get(case_id))["status"] == "awaiting_approval"
+    (action,) = await ActionStore(graph).for_case(case_id)
+    assert action["status"] == "proposed"
+    assert action["kind"] == "escalate"  # no suspicious verdict: escalate, not freeze
+    assert action["target_id"] == record.seed_account_id
+    assert action["blast_radius"]["account_count"] > 0
+
+
 async def test_a_closed_case_frees_its_alert_for_a_new_investigation(
     api, fixture_world, created, graph
 ):

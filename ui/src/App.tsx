@@ -29,6 +29,9 @@ export default function App() {
   const [alertsError, setAlertsError] = useState<string | null>(null)
   const [mode, setMode] = useState<'single' | 'orchestrated'>('orchestrated')
   const [starting, setStarting] = useState<string | null>(null)
+  // Why the last Investigate click failed (a cap, say). Kept apart from loading errors so the
+  // alert list stays on screen.
+  const [startError, setStartError] = useState<string | null>(null)
 
   const loadAlerts = useCallback(() => {
     api.alerts().then((a) => { setAlerts(a); setAlertsError(null) })
@@ -49,12 +52,13 @@ export default function App() {
 
   const investigate = async (alert: Alert) => {
     setStarting(alert.id)
+    setStartError(null)
     try {
       const { case: started } = await api.investigate(alert.id, mode)
       go('case', started.id)
       loadAlerts()
     } catch (e) {
-      setAlertsError((e as Error).message)
+      setStartError(`The investigation could not start: ${(e as Error).message}.`)
     } finally {
       setStarting(null)
     }
@@ -82,6 +86,7 @@ export default function App() {
           </label>
         </fieldset>
         <h2 className="rail-title">Alerts</h2>
+        {startError && <p className="error" role="alert">{startError}</p>}
         <AlertList alerts={alerts} error={alertsError}
           selectedCase={route.kind === 'none' ? null : route.caseId} starting={starting}
           onInvestigate={investigate} onOpen={(id) => go('case', id)}

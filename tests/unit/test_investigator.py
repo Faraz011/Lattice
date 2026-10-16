@@ -111,3 +111,37 @@ async def test_tool_progress_reported_by_the_investigation_is_published():
 
     kinds = [kind for _, kind, _ in events.published]
     assert kinds == ["investigation_started", "tool_called", "tool_result", "finding"]
+
+
+async def test_a_long_investigation_keeps_its_case_fresh_for_the_sweeper():
+    touched: list[str] = []
+
+    async def touch(case_id):
+        touched.append(case_id)
+
+    async def investigate(brief, on_event):
+        for _ in range(3):
+            await on_event("tool_called", {"tool": "graph_neighbors"})
+        return Finding.partial(brief.hypothesis, "x")
+
+    await make_handler(investigate, FakeEvents(), FakeQueue(), touch=touch,
+                       touch_every_s=0)(job_for(brief()))
+
+    assert touched == ["case_1"] * 4  # on start and on every tool event
+
+
+async def test_touches_are_throttled():
+    touched: list[str] = []
+
+    async def touch(case_id):
+        touched.append(case_id)
+
+    async def investigate(brief, on_event):
+        for _ in range(5):
+            await on_event("tool_called", {"tool": "graph_neighbors"})
+        return Finding.partial(brief.hypothesis, "x")
+
+    await make_handler(investigate, FakeEvents(), FakeQueue(), touch=touch,
+                       touch_every_s=3600)(job_for(brief()))
+
+    assert touched == ["case_1"]

@@ -127,3 +127,24 @@ async def test_redelivering_a_completed_job_is_a_no_op(redis_client, keys):
     await drain(consumer, rounds=4)
 
     assert handled == [job.job_id]
+
+
+async def test_a_transient_redis_error_does_not_stop_the_worker(redis_client, keys, monkeypatch):
+    consumer = Consumer(redis_client, keys, "echo", group="echo", name="w1",
+                        handler=lambda job: asyncio.sleep(0))
+    stop = asyncio.Event()
+    calls = 0
+
+    async def flaky(block_ms):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise ConnectionError("redis restarting")
+        stop.set()
+        return 0
+
+    monkeypatch.setattr(consumer, "run_once", flaky)
+
+    await asyncio.wait_for(consumer.run_forever(stop, retry_s=0.01), timeout=5)
+
+    assert calls == 2

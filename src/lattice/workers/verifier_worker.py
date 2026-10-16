@@ -8,13 +8,11 @@ Steps for one verify job:
 5. Save the case's replay recording.
 """
 
-import json
 from collections.abc import Awaitable, Callable
-from typing import Any
 
 from lattice.agents.narrator import Narrative, template_narrative
 from lattice.agents.schemas import Finding
-from lattice.cases.actions import ActionStore
+from lattice.cases.proposals import propose_for_case
 from lattice.cases.store import CaseStore
 from lattice.cases.views import record_case
 from lattice.config import Settings
@@ -23,7 +21,6 @@ from lattice.explain.report import CircuitReport, build_report
 from lattice.explain.verdict import Outcome, decide
 from lattice.graph.client import GraphClient
 from lattice.graph.subgraph import load_evidence
-from lattice.mcp_server import tools_algo, tools_case
 from lattice.queue.events import EventStream
 from lattice.queue.jobs import Job
 from lattice.queue.streams import Handler
@@ -47,7 +44,7 @@ async def _template(case_id: str, report: CircuitReport) -> Narrative:
 def make_handler(
     graph: GraphClient, events: EventStream, settings: Settings, narrate: Narrate = _template
 ) -> Handler:
-    cases, actions = CaseStore(graph), ActionStore(graph)
+    cases = CaseStore(graph)
     scorer = Scorer.from_settings(settings)
 
     async def handle(job: Job) -> None:
@@ -95,7 +92,10 @@ def make_handler(
         })
 
         if outcome.status == "awaiting_approval":
-            await _propose(graph, actions, events, case, outcome)
+            verdict = outcome.verdict
+            await propose_for_case(graph, events, case, verdict, (
+                f"{verdict.typology} pattern, risk {verdict.risk} (score {verdict.score:.2f}), "
+                f"backed by {len(verdict.claims)} verified claims"))
         await cases.transition(case["id"], outcome.status, _reason(outcome, scorer.threshold))
         await record_case(graph, events, case["id"])  # every verdict can be replayed
 
@@ -109,30 +109,6 @@ def _reason(outcome: Outcome, threshold: float) -> str:
         return (f"the cited evidence scores {outcome.verdict.score:.2f}, below the "
                 f"{threshold:.2f} threshold")
     return f"{outcome.verdict.typology} pattern scores {outcome.verdict.score:.2f}"
-
-
-async def _propose(
-    graph: GraphClient, actions: ActionStore, events: EventStream, case: dict[str, Any],
-    outcome: Outcome,
-) -> None:
-    verdict = outcome.verdict
-    kind = "freeze" if verdict.risk == "high" else "escalate"
-    target = case["seed_account_id"]
-    rationale = (f"{verdict.typology} pattern, risk {verdict.risk} (score {verdict.score:.2f}), "
-                 f"backed by {len(verdict.claims)} verified claims")
-    proposal = await tools_case.propose_action(graph, case["id"], kind, target, rationale)
-    impact = await tools_algo.impact(graph, target, hops=2)
-    blast_radius = {
-        "hops": 2,
-        "account_count": impact.account_count,
-        "customer_count": impact.customer_count,
-        "sample_accounts": impact.accounts[:20],
-    }
-    await actions.set_blast_radius(proposal.action_id, blast_radius)
-    await events.publish(case["id"], "action_proposed", {
-        "action_id": proposal.action_id, "kind": kind, "tier": proposal.tier,
-        "target_id": target, "blast_radius": json.loads(json.dumps(blast_radius)),
-    })
 
 
 async def build_handler(ctx) -> Handler:

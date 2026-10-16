@@ -33,6 +33,12 @@ async def graph_neighbors(node_id: str, ctx: Context) -> dict:
     return {"result_id": f"led_{len(calls)}", "node_ids": [node_id], "rel_ids": ["tx_1"]}
 
 
+@fake.tool(name="case_propose_action", description="Propose an action.")
+async def case_propose_action(kind: str, target_id: str) -> dict:
+    calls.append({"proposed": kind})
+    return {"result_id": "led_p", "node_ids": [target_id], "rel_ids": []}
+
+
 @fake.tool(name="graph_get_node", description="One node.")
 async def graph_get_node(node_id: str) -> dict:
     raise ToolError(f"no node with id {node_id}")
@@ -121,6 +127,21 @@ async def test_tool_calls_carry_the_injected_case_id_which_the_model_never_suppl
     assert calls == [{"args": {"node_id": "acct_1"}, "case_id": "case_abc"}]
     schema = next(t for t in seen_tools if t.name == "graph_neighbors").parameters_json_schema
     assert "case_id" not in schema.get("properties", {})
+
+
+async def test_agents_never_see_the_action_proposal_tool(mcp_url):
+    seen: list[str] = []
+
+    def script(messages, info: AgentInfo) -> ModelResponse:
+        seen.extend(t.name for t in info.function_tools)
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, REPORT)])
+
+    runtime = AgentRuntime(settings(), mcp_url=mcp_url)
+    await runtime.run("investigator", "case_abc", "investigate acct_1", FindingReport, partial,
+                      model=FunctionModel(script))
+
+    assert "graph_neighbors" in seen
+    assert "case_propose_action" not in seen
 
 
 async def test_repeated_tool_errors_are_shown_to_the_model_without_ending_the_run(mcp_url):

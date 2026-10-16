@@ -32,6 +32,9 @@ STATEMENTS = [
     "CREATE INDEX case_alert IF NOT EXISTS FOR (c:Case) ON (c.alert_id)",
     "CREATE INDEX action_case IF NOT EXISTS FOR (a:Action) ON (a.case_id)",
     "CREATE INDEX ledger_case IF NOT EXISTS FOR (l:LedgerEntry) ON (l.case_id)",
+    # One recording per case, so concurrent saves update it instead of creating a second.
+    "CREATE CONSTRAINT recording_case IF NOT EXISTS FOR (r:Recording) REQUIRE r.case_id IS UNIQUE",
+    "CREATE INDEX recording_alert IF NOT EXISTS FOR (r:Recording) ON (r.alert_id)",
 ]
 
 

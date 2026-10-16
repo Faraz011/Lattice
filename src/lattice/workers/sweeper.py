@@ -63,10 +63,13 @@ class Sweeper:
     async def _stalled_cases(self) -> None:
         stale = await self._cases.stalled(RECOVERABLE, self._settings.case_stall_timeout_s)
         for case in stale:
-            if case["status"] == "investigating" and await self._fanin.exists(case["id"]):
+            if (case["status"] == "investigating" and await self._fanin.exists(case["id"])
+                    and not await self._fanin.handed_off(case["id"])):
                 continue  # still collecting; the deadline pass owns it
+            # Findings are saved before every hand-off, so a case that has them only lost its
+            # verify job (Redis lost it, or it was dead-lettered): verify again, don't re-run.
             saved = await self._cases.saved_findings(case["id"])
-            if case["status"] == "verifying" and saved:
+            if case["status"] in ("investigating", "verifying") and saved:
                 await hand_off_to_verifier(None, self._queue, case["id"], saved)
             else:
                 await self._queue.enqueue(first_job(case))

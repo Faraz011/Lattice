@@ -137,6 +137,45 @@ async def test_a_case_lost_while_verifying_is_verified_from_its_saved_findings(
     assert (await store.get(case["id"]))["status"] in ("closed_no_action", "needs_review")
 
 
+async def test_a_handed_off_fan_in_whose_verify_job_was_lost_is_verified_again(
+    graph, redis_client, keys, fixture_world, cases
+):
+    case = await cases(record_of(fixture_world, "fan_out"))
+    store = CaseStore(graph)
+    for status in ("planning", "investigating"):
+        await store.transition(case["id"], status, "test")
+    fanin = FanIn(redis_client, keys)
+    await fanin.open(case["id"], ["fan_out"], deadline_s=300)
+    assert await fanin.record(case["id"], "fan_out", finding("fan_out"))  # hand-off claimed
+    await store.save_findings(case["id"], [finding("fan_out")])
+    # ...but the verify job never ran (dead-lettered, or lost with Redis).
+    await graph.write("MATCH (c:Case {id: $id}) SET c.updated_at = datetime() - duration('PT1H')",
+                      id=case["id"])
+
+    await Sweeper(graph, redis_client, keys, load_settings()).sweep_once()
+
+    (verify,) = await queued(redis_client, keys, "verify")
+    assert verify.case_id == case["id"]
+    assert await queued(redis_client, keys, "investigate") == []
+
+
+async def test_a_fan_in_still_collecting_is_left_to_its_deadline(
+    graph, redis_client, keys, fixture_world, cases
+):
+    case = await cases(record_of(fixture_world, "fan_out"))
+    store = CaseStore(graph)
+    for status in ("planning", "investigating"):
+        await store.transition(case["id"], status, "test")
+    await FanIn(redis_client, keys).open(case["id"], ["fan_out", "peeling_chain"], 300)
+    await graph.write("MATCH (c:Case {id: $id}) SET c.updated_at = datetime() - duration('PT1H')",
+                      id=case["id"])
+
+    await Sweeper(graph, redis_client, keys, load_settings()).sweep_once()
+
+    assert await queued(redis_client, keys, "verify") == []
+    assert await queued(redis_client, keys, "investigate") == []
+
+
 async def test_an_approved_action_that_never_ran_is_requeued(
     graph, redis_client, keys, fixture_world, cases
 ):

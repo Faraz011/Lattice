@@ -38,10 +38,24 @@ class GraphClient:
 
     async def query_type(self, query: str, **params: Any) -> str:
         """How Neo4j classifies a query without running it: 'r', 'rw', 'w' or 's'."""
+        return (await self.explain(query, **params))[0]
+
+    async def explain(self, query: str, **params: Any) -> tuple[str, list[str]]:
+        """The query type and every plan operator as "Operator details", without running it."""
         result = await self._driver.execute_query(
             f"EXPLAIN {query}", parameters_=params, routing_=RoutingControl.READ
         )
-        return result.summary.query_type
+        operators: list[str] = []
+
+        def walk(plan: dict[str, Any]) -> None:
+            operators.append(f"{plan.get('operatorType', '')} "
+                             f"{plan.get('args', {}).get('Details', '')}")
+            for child in plan.get("children", []):
+                walk(child)
+
+        if result.summary.plan:
+            walk(result.summary.plan)
+        return result.summary.query_type, operators
 
     async def read_records(
         self, query: str, params: dict[str, Any], *, timeout: float, max_rows: int

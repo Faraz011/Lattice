@@ -94,9 +94,15 @@ class Consumer:
             await self._process(msg_id, fields)
         return len(messages)
 
-    async def run_forever(self, stop: asyncio.Event) -> None:
+    async def run_forever(self, stop: asyncio.Event, retry_s: float = 2.0) -> None:
         while not stop.is_set():
-            await self.run_once(block_ms=1_000)
+            try:
+                await self.run_once(block_ms=1_000)
+            except Exception:  # Redis restarting or a dropped connection: wait and carry on
+                log.exception("%s: reading %s failed; retrying in %.0fs",
+                              self.name, self._stream, retry_s)
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(stop.wait(), timeout=retry_s)
 
     async def _process(self, msg_id: str, fields: dict[str, str]) -> None:
         job = Job.from_fields(fields)

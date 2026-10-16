@@ -7,9 +7,9 @@ from neo4j.graph import Node, Path, Relationship
 from pydantic import BaseModel
 
 from lattice.graph.client import GraphClient
-from lattice.graph.schema import APP_LABELS, DATA_LABELS, DATA_REL_TYPES, LABEL_BY_KIND, TRANSFER
+from lattice.graph.schema import DATA_LABELS, DATA_REL_TYPES, LABEL_BY_KIND, TRANSFER
 from lattice.ids import kind_of
-from lattice.mcp_server.cypher_guard import CypherRejected, check_readonly
+from lattice.mcp_server.cypher_guard import CypherRejected, check_plan, check_readonly
 from lattice.mcp_server.envelope import UntrustedText
 from lattice.mcp_server.ledger import ToolResult
 from lattice.mcp_server.views import (
@@ -421,11 +421,10 @@ async def cypher_readonly(
 ) -> CypherResult:
     params = params or {}
     check_readonly(query)
-    if await graph.query_type(query, **params) != "r":
+    query_type, operators = await graph.explain(query, **params)
+    if query_type != "r":
         raise CypherRejected("Neo4j classifies this query as a write")
-    for label in APP_LABELS:
-        if f":{label}" in query:
-            raise CypherRejected(f"{label} records are not readable through this tool")
+    check_plan(operators)
 
     records, truncated = await graph.read_records(
         query, params, timeout=_clamp(int(timeout_s), 1, 30), max_rows=_clamp(row_cap, 1, 500)

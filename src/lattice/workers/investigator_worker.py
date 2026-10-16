@@ -6,6 +6,7 @@ hypothesis that silently died. Then the finding moves on:
 - orchestrated mode: into the case's fan-in, and to the verifier when the set is complete.
 """
 
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
@@ -20,6 +21,8 @@ from lattice.queue.streams import Handler
 
 Investigate = Callable[[HypothesisBrief, OnEvent], Awaitable[Finding]]
 SaveFindings = Callable[[str, list[Finding]], Awaitable[None]]
+Touch = Callable[[str], Awaitable[None]]
+TOUCH_EVERY_S = 30
 
 
 class Publisher(Protocol):
@@ -39,6 +42,8 @@ def make_handler(
     fanin: FanInRecorder | None = None,
     save_findings: SaveFindings | None = None,
     worker: str | None = None,
+    touch: Touch | None = None,
+    touch_every_s: float = TOUCH_EVERY_S,
 ) -> Handler:
     async def handle(job: Job) -> None:
         brief = HypothesisBrief.model_validate(job.payload["brief"])
@@ -47,7 +52,20 @@ def make_handler(
             started["worker"] = worker
         await events.publish(job.case_id, "investigation_started", started)
 
+        # A case that is being worked on must not look stalled to the sweeper, however long
+        # the rate limiter makes the investigation take.
+        last_touch = float("-inf")
+
+        async def keep_alive() -> None:
+            nonlocal last_touch
+            if touch is not None and time.monotonic() - last_touch >= touch_every_s:
+                last_touch = time.monotonic()
+                await touch(job.case_id)
+
+        await keep_alive()
+
         async def on_event(kind: str, data: dict[str, Any]) -> None:
+            await keep_alive()
             await events.publish(job.case_id, kind, {**data, "hypothesis": brief.hypothesis})
 
         finding = await run_investigation(brief, on_event)
@@ -85,4 +103,4 @@ async def build_handler(ctx) -> Handler:
 
     return make_handler(run_investigation, ctx.events, JobQueue(ctx.redis, ctx.keys),
                         fanin=FanIn(ctx.redis, ctx.keys), save_findings=store.save_findings,
-                        worker=ctx.worker_name)
+                        worker=ctx.worker_name, touch=store.touch)
