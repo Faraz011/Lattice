@@ -20,6 +20,7 @@ import json
 import random
 import re
 import sys
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 
@@ -27,6 +28,7 @@ import httpx
 
 from lattice.config import Settings, load_settings
 from lattice.datagen.generator import DEMO_SEED, World, generate_world
+from lattice.datagen.manifest import CaseRecord, Manifest
 from lattice.eval.fixture_check import (
     MAX_HYPOTHESES,
     NARRATOR_REQUESTS,
@@ -53,17 +55,25 @@ SUBSET_SEED = 21
 
 
 def all_alerts(world: World) -> list[AlertOutcome]:
-    """Every alert in the world, with its role and the planted edges it should recover."""
-    twins = {c.twin_case_id for c in world.manifest.cases if c.injected_transfer_id}
-    alert_of = {c.case_id: c.alert_id for c in world.manifest.cases}
+    """Every alert in a generated world, with its role and the planted edges to recover."""
+    return alerts_from_manifest(world.manifest, lambda case: expected_edges(world, case))
+
+
+def alerts_from_manifest(
+    manifest: Manifest, edges_of: Callable[[CaseRecord], list[str]] | None = None
+) -> list[AlertOutcome]:
+    """Every case in a manifest as an alert to run. Without `edges_of`, a case's expected
+    edges are its transfers (enough for data without devices, such as Elliptic2)."""
+    twins = {c.twin_case_id for c in manifest.cases if c.injected_transfer_id}
+    alert_of = {c.case_id: c.alert_id for c in manifest.cases}
     out = []
-    for case in sorted(world.manifest.cases, key=lambda c: c.case_id):
+    for case in sorted(manifest.cases, key=lambda c: c.case_id):
         role = ("injected" if case.injected_transfer_id
                 else "twin" if case.case_id in twins else case.category)
         out.append(AlertOutcome(
             alert_id=case.alert_id, case_kind=case.kind, role=role,
             expected_suspicious=case.expected_verdict == "suspicious",
-            expected_edges=expected_edges(world, case),
+            expected_edges=edges_of(case) if edges_of else list(case.transfer_ids),
             twin_alert_id=alert_of.get(case.twin_case_id or ""),
         ))
     return out
@@ -176,11 +186,20 @@ def _slug(text: str) -> str:
 async def main_async(args: argparse.Namespace) -> int:
     settings = load_settings()
     modes = tuple(args.modes)
-    world = generate_world(args.seed, "demo")
-    alerts = all_alerts(world)
+    if args.manifest:
+        # A world loaded elsewhere (an Elliptic2 slice): run its alerts against its labels.
+        manifest = Manifest.model_validate_json(args.manifest.read_text())
+        world, alerts = None, alerts_from_manifest(manifest)
+        world_name = f"{manifest.world} (seed {manifest.seed}, from {args.manifest.name})"
+        args.no_load = True
+    else:
+        world = generate_world(args.seed, "demo")
+        alerts = all_alerts(world)
+        world_name = f"demo world, seed {args.seed}"
 
 
-    label = f"demo-{args.seed}-{_slug(args.model)}-{'-'.join(modes)}"
+    prefix = f"manifest-{_slug(args.manifest.stem)}" if args.manifest else f"demo-{args.seed}"
+    label = f"{prefix}-{_slug(args.model)}-{'-'.join(modes)}"
     state = State(args.out_dir / f"{label}.json", key=state_key)
     if args.fresh and state.path.exists():
         state.path.unlink()
@@ -216,7 +235,7 @@ async def main_async(args: argparse.Namespace) -> int:
     concurrency = max(1, min(args.concurrency, settings.max_active_cases))
     token = settings.approver_token.get_secret_value()
     async with GraphClient.from_settings(settings) as graph:
-        if not args.no_load:
+        if not args.no_load and world is not None:
             await apply_schema(graph)
             await load_batch(graph, world.batch)
         async with httpx.AsyncClient(base_url=args.api, timeout=30) as http:
@@ -239,7 +258,7 @@ async def main_async(args: argparse.Namespace) -> int:
                       "to resume.", file=sys.stderr)
                 return 3
 
-    report = render_report(outcomes, model=args.model, world=f"demo world, seed {args.seed}",
+    report = render_report(outcomes, model=args.model, world=world_name,
                            modes=modes, subset=subset,
                            pricing=Pricing(args.price_in, args.price_out))
     path = args.out_dir / f"{label}.md"
@@ -256,6 +275,9 @@ def main(argv: list[str] | None = None) -> None:
                         help="the model the workers run, for the report (default LATTICE_MODEL)")
     parser.add_argument("--modes", nargs="+", choices=MODES, default=list(MODES))
     parser.add_argument("--seed", type=int, default=DEMO_SEED, help="world seed")
+    parser.add_argument("--manifest", type=Path, default=None,
+                        help="run the alerts of an already loaded world, such as an Elliptic2 "
+                             "slice's manifest, instead of the demo world")
     parser.add_argument("--subset-seed", type=int, default=SUBSET_SEED)
     parser.add_argument("--concurrency", type=int, default=2,
                         help="alerts in flight at once (capped by LATTICE_MAX_ACTIVE_CASES)")

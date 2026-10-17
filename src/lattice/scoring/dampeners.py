@@ -13,7 +13,7 @@ def payroll_cadence(g: EvidenceGraph, result: DetectorResult) -> float:
     if hub is None or hub.kind != "business":
         return 1.0
     payments: dict[str, list] = defaultdict(list)
-    for t in g.transfers():
+    for t in g.priced_transfers():
         if t.src == hub.id:
             payments[t.dst].append(t)
     regular = [
@@ -28,7 +28,7 @@ def merchant_inflows(g: EvidenceGraph, result: DetectorResult) -> float:
     collector = g.account(result.anchor) if result.anchor else None
     if collector is None or collector.kind != "business":
         return 1.0
-    inflows = [t for t in g.transfers() if t.dst == collector.id]
+    inflows = [t for t in g.priced_transfers() if t.dst == collector.id]
     card = [t for t in inflows if t.channel == "card"]
     return 0.2 if inflows and len(card) >= 0.5 * len(inflows) else 1.0
 

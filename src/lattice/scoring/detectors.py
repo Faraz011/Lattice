@@ -75,7 +75,7 @@ def _longest(start: Transfer, step: Callable[[Transfer], tuple[Transfer, list[st
 
 def peeling_chain(g: EvidenceGraph) -> DetectorResult:
     """Money forwarded hop by hop within 48h, each hop skimming a small slice to a side account."""
-    transfers = g.transfers()
+    transfers = g.priced_transfers()
     out = _outflows(transfers)
     window = timedelta(hours=48)
 
@@ -106,7 +106,7 @@ def peeling_chain(g: EvidenceGraph) -> DetectorResult:
 
 def fan_in_structuring(g: EvidenceGraph) -> DetectorResult:
     """Many senders depositing just under the reporting threshold into one account within 7 days."""
-    transfers = g.transfers()
+    transfers = g.priced_transfers()
     out = _outflows(transfers)
     window = timedelta(days=7)
     best: tuple[int, list[Transfer], str | None] = (0, [], None)
@@ -134,7 +134,7 @@ def fan_in_structuring(g: EvidenceGraph) -> DetectorResult:
 
 def fan_out(g: EvidenceGraph) -> DetectorResult:
     """One large deposit split across many recipients within 48 hours."""
-    transfers = g.transfers()
+    transfers = g.priced_transfers()
     out = _outflows(transfers)
     best: tuple[int, list[str], str | None] = (0, [], None)
     for hub, inflows in _inflows(transfers).items():
@@ -158,7 +158,7 @@ def fan_out(g: EvidenceGraph) -> DetectorResult:
 
 def round_trip(g: EvidenceGraph) -> DetectorResult:
     """Similar amounts leaving an account and returning to it within 14 days (3+ transfers)."""
-    out = _outflows(g.transfers())
+    out = _outflows(g.priced_transfers())
     span = timedelta(days=14)
     best: list[Transfer] = []
 
@@ -190,12 +190,13 @@ def round_trip(g: EvidenceGraph) -> DetectorResult:
 
 def rapid_layering(g: EvidenceGraph) -> DetectorResult:
     """Funds passing nearly whole through accounts opened within 14 days, each hop within 24h."""
-    transfers = g.transfers()
+    transfers = g.priced_transfers()
     out = _outflows(transfers)
 
     def step(inflow: Transfer) -> tuple[Transfer, list[str]] | None:
         account = g.account(inflow.dst)
-        if account is None or inflow.ts - account.created_at > timedelta(days=14):
+        if (account is None or account.created_at is None
+                or inflow.ts - account.created_at > timedelta(days=14)):
             return None
         onward = [t for t in out.get(inflow.dst, [])
                   if inflow.ts <= t.ts <= inflow.ts + timedelta(hours=24)
@@ -219,7 +220,7 @@ def rapid_layering(g: EvidenceGraph) -> DetectorResult:
 
 def shared_device(g: EvidenceGraph) -> DetectorResult:
     """Accounts of different customers on one device, all paying the same destination."""
-    out = _outflows(g.transfers())
+    out = _outflows(g.priced_transfers())
     by_device: dict[str, list] = defaultdict(list)
     for link in g.links():
         by_device[link.device_id].append(link)
@@ -247,7 +248,7 @@ def shared_device(g: EvidenceGraph) -> DetectorResult:
 
 def exit_via_mixer(g: EvidenceGraph) -> DetectorResult:
     """Funds sent into a mixer and on to an exchange within 3 days."""
-    transfers = g.transfers()
+    transfers = g.priced_transfers()
     out, inn = _outflows(transfers), _inflows(transfers)
 
     def kind(account_id: str) -> str | None:

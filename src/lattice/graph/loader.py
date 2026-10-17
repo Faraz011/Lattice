@@ -25,15 +25,15 @@ class LoaderError(ValueError):
 class Customer(BaseModel):
     id: str
     name: str
-    kind: Literal["person", "business"]
+    kind: Literal["person", "business", "entity"]  # entity: an Elliptic2 cluster's owner
     country: str
 
 
 class Account(BaseModel):
     id: str
     customer_id: str
-    kind: Literal["person", "business", "exchange", "mixer"]
-    created_at: datetime
+    kind: Literal["person", "business", "exchange", "mixer", "cluster"]
+    created_at: datetime | None  # unknown for real-world data such as Elliptic2
     country: str
 
 
@@ -51,8 +51,10 @@ class Transfer(BaseModel):
     id: str
     src: str
     dst: str
-    amount: float
-    ts: datetime
+    # Unknown for Elliptic2, whose flow features are anonymised; detectors that need them
+    # skip such transfers.
+    amount: float | None
+    ts: datetime | None
     channel: str
     memo: str | None = None
 
@@ -61,7 +63,7 @@ class Alert(BaseModel):
     id: str
     seed_account_id: str
     reason: str
-    ts: datetime
+    ts: datetime | None
 
 
 class GraphBatch(BaseModel):

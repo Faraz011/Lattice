@@ -85,15 +85,18 @@ async def structural_summary(graph: GraphClient, case: dict[str, Any]) -> str:
     def side(label: str, rels, end: str) -> str:
         if not rels:
             return f"{label}: none"
-        amounts = [r.props["amount"] for r in rels]
-        return (f"{label}: {len(rels)} transfers, total {sum(amounts):,.2f}, largest "
-                f"{max(amounts):,.2f}, {len({getattr(r, end) for r in rels})} counterparties "
-                f"({kinds(rels, end)})")
+        amounts = [r.props["amount"] for r in rels if r.props.get("amount") is not None]
+        money = (f"total {sum(amounts):,.2f}, largest {max(amounts):,.2f}, " if amounts
+                 else "amounts unknown, ")
+        return (f"{label}: {len(rels)} transfers, {money}"
+                f"{len({getattr(r, end) for r in rels})} counterparties ({kinds(rels, end)})")
 
-    times = sorted(datetime.fromisoformat(r.props["ts"]) for r in transfers)
+    times = sorted(datetime.fromisoformat(r.props["ts"]) for r in transfers
+                   if r.props.get("ts") is not None)
     span_days = (times[-1] - times[0]).total_seconds() / 86_400 if times else 0
     near_threshold = sum(1 for r in inbound
-                         if 0.8 * REPORTING_THRESHOLD <= r.props["amount"] < REPORTING_THRESHOLD)
+                         if 0.8 * REPORTING_THRESHOLD <= (r.props.get("amount") or 0)
+                         < REPORTING_THRESHOLD)
     seed_props = nodes[seed].props if seed in nodes else {}
     return "\n".join([
         f"- seed account kind: {seed_props.get('kind', '?')}, opened "

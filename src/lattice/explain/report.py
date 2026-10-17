@@ -36,7 +36,7 @@ def build_report(graph: EvidenceGraph, scorer: Scorer) -> CircuitReport:
     }
     edges = [
         EdgeDetail(id=t.id, kind="transfer", src=t.src, dst=t.dst, amount=t.amount,
-                   ts=t.ts.isoformat())
+                   ts=t.ts.isoformat() if t.ts else None)
         for t in graph.all_transfers if t.id in named
     ] + [
         EdgeDetail(id=link.id, kind="device_link", src=link.account_id, dst=link.device_id)

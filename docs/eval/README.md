@@ -63,3 +63,43 @@ The scripted runs measure the tools, ledger, verifier, scorer and circuit end to
 not measure how well a language model investigates. Rerun both commands with
 `--model google:gemini-flash-latest` (and the workers on that model) before quoting agent
 results.
+
+## Real data: an Elliptic2 slice
+
+[Elliptic2](https://www.elliptic.co/elliptic2) is a Bitcoin graph of about 49M clusters with
+about 122K labelled subgraphs. Downloading it needs a registration with Elliptic, so the
+download is a manual step. Unzip the files into a folder, then:
+
+```bash
+uv run python -m lattice.ingest.elliptic2 --dir path/to/elliptic2 --subgraphs 100 --load
+uv run python -m lattice.eval.harness --manifest data/elliptic2-manifest.json --modes orchestrated
+```
+
+What the slice contains:
+
+- A seeded, label-balanced sample of subgraphs.
+- Their member clusters as accounts, and each member's flows in the background graph (one hop,
+  capped by `--neighbors`).
+- One alert per subgraph, on its best-connected member. The alert text never reveals the label.
+- A manifest that keeps the labels out of Neo4j: suspicious subgraphs are `planted` and licit
+  ones `decoy`.
+
+The CSVs are streamed, so memory follows the slice and not the 196M-edge background. IDs carry
+`ell` (for example `acct_ell1234`), so they never collide with generated data.
+
+### What to expect
+
+Elliptic2's flow features are anonymised, so the slice has no amounts and no timestamps.
+
+- Structural investigation works: neighbours, paths, cycles, fan-in and fan-out by counterparty
+  count, PageRank, communities and blast radius.
+- The risk scorer's detectors all need amounts and times. They contribute zero, so the scorer
+  never flags an Elliptic2 case and no evidence circuit is drawn.
+- When investigators find a structural pattern (a cycle, say), the verifier reports that the
+  investigators and the scorer disagree and sends the case for review.
+- Licit subgraphs close correctly, while suspicious ones are missed. A run on the sample in
+  `tests/fixtures/elliptic2_sample` shows exactly this: 60% decision accuracy, and the one
+  cycle sent for review.
+
+Flagging real Elliptic2 cases needs a structural scorer: detectors that work on counts and
+shapes without amounts or times, tuned against Elliptic2's labels. That is follow-up work.
