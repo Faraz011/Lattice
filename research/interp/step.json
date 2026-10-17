@@ -1,0 +1,30 @@
+{
+  "case_id": "case_aa7780b9e6504f40",
+  "hypothesis": "peeling_chain",
+  "seed_account_id": "acct_67e8a1346d2b1c9a",
+  "recorded_tool": "graph_match_pattern",
+  "options": [
+    {
+      "letter": "A",
+      "tool": "graph_neighbors",
+      "description": "list the transfers and devices around an account"
+    },
+    {
+      "letter": "B",
+      "tool": "graph_find_paths",
+      "description": "trace money paths between two accounts"
+    },
+    {
+      "letter": "C",
+      "tool": "graph_match_pattern",
+      "description": "test a laundering shape (chain, fan-in, fan-out, cycle)"
+    },
+    {
+      "letter": "D",
+      "tool": "algo_pagerank",
+      "description": "rank which accounts are most central around an account"
+    }
+  ],
+  "prompt": "An anti-money-laundering investigator is examining an alert.\nThe alert was raised on account acct_67e8a1346d2b1c9a. The investigator is testing for peeling chain.\nWhich tool should the investigator call first?\nA) graph_neighbors: list the transfers and devices around an account\nB) graph_find_paths: trace money paths between two accounts\nC) graph_match_pattern: test a laundering shape (chain, fan-in, fan-out, cycle)\nD) algo_pagerank: rank which accounts are most central around an account\nAnswer:",
+  "target": " C"
+}
