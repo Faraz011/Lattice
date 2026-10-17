@@ -41,9 +41,10 @@ export function LlmAttribution({ attribution, onFocus }: {
           </ol>
           {agreement != null && (
             <p>
-              Of the {holding} results that hold the scorer's circuit,{' '}
-              {Math.round(agreement * holding)} are among the {holding} the model leaned on
-              most.
+              Of the {holding} {holding === 1 ? 'result that holds' : 'results that hold'} the
+              scorer's circuit, {Math.round(agreement * holding)}{' '}
+              {Math.round(agreement * holding) === 1 ? 'is' : 'are'} among the {holding} the
+              model leaned on most.
             </p>
           )}
           {status === 'partial' && note && <p className="muted">{note}</p>}
