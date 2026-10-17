@@ -3,17 +3,24 @@
 score = 1 - product(1 - weight * strength * dampening) over detectors, so independent signals
 add up but no single weak one dominates. The typology is the strongest detector. Each edge's
 contribution is the sum of its share of every detector that used it.
+
+Structural detectors (shape and counts only) join the priced ones when the evidence has no
+amounts or times at all, or always or never, as `structural` says.
 """
 
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
+from typing import Literal
 
 from lattice.graph.subgraph import EvidenceGraph
 from lattice.scoring.dampeners import dampening
 from lattice.scoring.detectors import DETECTORS, DetectorResult
+from lattice.scoring.structural import STRUCTURAL_DETECTORS, STRUCTURAL_WEIGHTS
 
 DEFAULT_THRESHOLD = 0.6
+
+StructuralMode = Literal["auto", "always", "never"]
 
 
 @dataclass(frozen=True)
@@ -27,20 +34,30 @@ class ScoreResult:
 
 class Scorer:
     def __init__(
-        self, weights: dict[str, float] | None = None, threshold: float = DEFAULT_THRESHOLD
+        self,
+        weights: dict[str, float] | None = None,
+        threshold: float = DEFAULT_THRESHOLD,
+        structural: StructuralMode = "auto",
     ) -> None:
-        self.weights = {name: 1.0 for name in DETECTORS} | (weights or {})
+        self.weights = {name: 1.0 for name in DETECTORS} | STRUCTURAL_WEIGHTS | (weights or {})
         self.threshold = threshold
+        self.structural = structural
 
     @classmethod
     def from_settings(cls, settings) -> "Scorer":
-        return cls(settings.detector_weights, settings.risk_threshold)
+        return cls(settings.detector_weights, settings.risk_threshold,
+                   settings.structural_detectors)
+
+    def detectors_for(self, g: EvidenceGraph) -> dict:
+        structural = self.structural == "always" or (
+            self.structural == "auto" and not g.has_priced_flows())
+        return DETECTORS | STRUCTURAL_DETECTORS if structural else DETECTORS
 
     def score(self, g: EvidenceGraph) -> ScoreResult:
         effective: dict[str, float] = {}
         edges: dict[str, float] = defaultdict(float)
         reasons: dict[str, str] = {}
-        for name, detect in DETECTORS.items():
+        for name, detect in self.detectors_for(g).items():
             result: DetectorResult = detect(g)
             if result.strength <= 0:
                 continue
