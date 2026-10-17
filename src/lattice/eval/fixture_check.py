@@ -23,11 +23,11 @@ import json
 import re
 import sys
 import time
+from collections import Counter
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import httpx
-import redis.asyncio as redis
 
 from lattice.config import Settings, load_settings
 from lattice.datagen.generator import World, generate_world
@@ -37,8 +37,6 @@ from lattice.graph.client import GraphClient
 from lattice.graph.loader import load_batch
 from lattice.graph.schema import apply_schema
 from lattice.ids import link_id
-from lattice.queue.jobs import Keys
-from lattice.queue.ratelimit import RateLimiter
 
 HELD_OUT_SEED = 4242
 OUT_DIR = Path(__file__).resolve().parents[3] / "data" / "fixture-check"
@@ -118,14 +116,29 @@ def check_quota(estimate: int, remaining: int | None) -> None:
         )
 
 
+async def budget(api: str) -> dict:
+    """Today's remaining model requests and case room, from the API, which reads the same
+    Redis and database the workers and the caps use."""
+    async with httpx.AsyncClient(base_url=api, timeout=10) as http:
+        response = await http.get("/budget")
+        response.raise_for_status()
+        return response.json()
+
+
+async def remaining_budget(api: str) -> int | None:
+    return (await budget(api))["remaining_today"]
+
+
 # --- resumable state -------------------------------------------------------------------------
 
 
 class State:
     """Finished alerts, one JSON file per run label, rewritten after every alert."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path,
+                 key: Callable[[AlertOutcome], str] = lambda o: o.alert_id) -> None:
         self.path = path
+        self.key = key
 
     def load(self) -> dict[str, AlertOutcome]:
         if not self.path.exists():
@@ -135,7 +148,7 @@ class State:
 
     def save(self, outcome: AlertOutcome) -> None:
         done = self.load()
-        done[outcome.alert_id] = outcome
+        done[self.key(outcome)] = outcome
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps({k: v.model_dump(mode="json") for k, v in done.items()},
                                         indent=1))
@@ -184,8 +197,16 @@ async def ledger_ids(graph: GraphClient, case_id: str) -> set[str]:
     return {i for row in rows for i in [*(row["n"] or []), *(row["r"] or [])]}
 
 
+async def run_facts(http: httpx.AsyncClient, case_id: str) -> dict:
+    """Tool calls from the case's ledger and model usage per role, through the API."""
+    ledger = (await http.get(f"/cases/{case_id}/evidence")).json()["ledger"]
+    usage = (await http.get(f"/cases/{case_id}/usage")).json()["roles"]
+    return {"tool_calls": dict(Counter(entry["tool"] for entry in ledger.values())),
+            "usage": usage}
+
+
 def api_investigator(http: httpx.AsyncClient, graph: GraphClient, timeout_s: float,
-                     token: str) -> Investigate:
+                     token: str, mode: str = "orchestrated") -> Investigate:
     async def investigate(alert: AlertOutcome) -> AlertOutcome:
         outcome = await _measure(alert)
         if outcome.case_id:
@@ -194,8 +215,7 @@ def api_investigator(http: httpx.AsyncClient, graph: GraphClient, timeout_s: flo
 
     async def _measure(alert: AlertOutcome) -> AlertOutcome:
         started = time.monotonic()
-        response = await http.post(f"/alerts/{alert.alert_id}/investigate",
-                                   json={"mode": "orchestrated"})
+        response = await http.post(f"/alerts/{alert.alert_id}/investigate", json={"mode": mode})
         if response.status_code == 429:
             raise CapReached(response.json().get("detail", "case cap reached"))
         response.raise_for_status()
@@ -208,10 +228,11 @@ def api_investigator(http: httpx.AsyncClient, graph: GraphClient, timeout_s: flo
                 break
             await asyncio.sleep(3)
         seconds = time.monotonic() - started
+        facts = {"mode": mode, **await run_facts(http, case_id)}
         if case.get("status") not in FINAL or not case.get("verdict"):
             return alert.model_copy(update={
                 "case_id": case_id, "status": case.get("status"), "seconds": seconds,
-                "error": f"no verdict after {timeout_s:.0f}s"})
+                "error": f"no verdict after {timeout_s:.0f}s", **facts})
 
         verdict = case["verdict"]
         circuit = (case.get("circuit") or {}).get("circuit") or {}
@@ -229,7 +250,9 @@ def api_investigator(http: httpx.AsyncClient, graph: GraphClient, timeout_s: flo
                            if circuit.get("status") == "circuit" else None),
             "comprehensive": circuit.get("comprehensive"),
             "unledgered_ids": sorted(cited - ledgered),
+            "rejected_citations": len(verdict.get("rejected_citations", [])),
             "seconds": seconds,
+            **facts,
         })
 
     return investigate
@@ -252,12 +275,8 @@ async def main_async(args: argparse.Namespace) -> int:
         state.path.unlink()
     pending = [a for a in alerts if a.alert_id not in state.load()]
 
-    client = redis.Redis.from_url(settings.redis_url, decode_responses=True)
-    limiter = RateLimiter(client, Keys(settings.redis_namespace).limiter(),
-                          settings.llm_requests_per_minute, settings.llm_requests_per_day)
     estimate = estimate_requests(len(pending), settings)
-    remaining = await limiter.remaining_today()
-    await client.aclose()
+    remaining = await remaining_budget(args.api)
     print(f"{len(alerts)} alerts, {len(pending)} still to run; up to {estimate} model requests "
           f"needed, {'no daily cap' if remaining is None else f'{remaining} remain today'}")
     try:

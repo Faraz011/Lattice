@@ -11,6 +11,7 @@ from lattice.cases.proposals import propose_for_case
 from lattice.cases.store import UnknownCase
 from lattice.cases.views import case_evidence, case_view, public, record_case
 from lattice.queue.replay import load_recording, load_snapshot
+from lattice.queue.usage import UsageLedger
 
 router = APIRouter()
 
@@ -33,6 +34,13 @@ async def get_case(case_id: str, api: Api) -> dict:
 async def get_evidence(case_id: str, api: Api) -> dict:
     case = await _case(api, case_id)
     return await case_evidence(api.graph, case_id, case.get("seed_account_id"))
+
+
+@router.get("/cases/{case_id}/usage")
+async def get_usage(case_id: str, api: Api) -> dict:
+    """Model requests, cache hits and tokens per agent role (R21)."""
+    await _case(api, case_id)
+    return {"case_id": case_id, "roles": await UsageLedger(api.redis, api.keys).get(case_id)}
 
 
 @router.get("/cases/{case_id}/events")

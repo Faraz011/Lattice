@@ -45,6 +45,7 @@ ToolEventHandler = Callable[[HandleResponseEvent], Awaitable[None]]
 # MCP tools no agent may call. Proposing an action is the verifier's job, after scoring.
 AGENT_HIDDEN_TOOLS = frozenset({"case_propose_action"})
 
+
 class Limiter(Protocol):
     async def acquire(self, timeout: float) -> bool: ...
 
@@ -53,6 +54,11 @@ class ResponseCache(Protocol):
     def key(self, model: str, messages: Any, tools: Any) -> str: ...
     async def get(self, key: str) -> str | None: ...
     async def put(self, key: str, value: str) -> None: ...
+
+
+class UsageSink(Protocol):
+    async def add(self, case_id: str, role: str, *, requests: int = 0, cached: int = 0,
+                  input_tokens: int = 0, output_tokens: int = 0) -> None: ...
 
 
 class BudgetExhausted(RuntimeError):
@@ -76,11 +82,17 @@ class BudgetedModel(WrapperModel):
         limiter: Limiter | None,
         cache: ResponseCache | None,
         wait_timeout_s: float,
+        usage: UsageSink | None = None,
+        case_id: str = "",
+        role: str = "",
     ) -> None:
         super().__init__(wrapped)
         self._limiter = limiter
         self._cache = cache
         self._wait_timeout_s = wait_timeout_s
+        self._usage = usage
+        self._case_id = case_id
+        self._role = role
 
     async def request(
         self,
@@ -97,6 +109,8 @@ class BudgetedModel(WrapperModel):
             )
             hit = await self._cache.get(key)
             if hit is not None:
+                if self._usage is not None:
+                    await self._usage.add(self._case_id, self._role, cached=1)
                 return ModelMessagesTypeAdapter.validate_json(hit)[0]
 
         if self._limiter is not None and not await self._limiter.acquire(self._wait_timeout_s):
@@ -105,6 +119,10 @@ class BudgetedModel(WrapperModel):
         response = await super().request(messages, model_settings, model_request_parameters)
         if key is not None:
             await self._cache.put(key, ModelMessagesTypeAdapter.dump_json([response]).decode())
+        if self._usage is not None:
+            await self._usage.add(self._case_id, self._role, requests=1,
+                                  input_tokens=response.usage.input_tokens or 0,
+                                  output_tokens=response.usage.output_tokens or 0)
         return response
 
     @asynccontextmanager
@@ -145,11 +163,13 @@ class AgentRuntime:
         mcp_url: str | None,
         limiter: Limiter | None = None,
         cache: ResponseCache | None = None,
+        usage: UsageSink | None = None,
     ) -> None:
         self._settings = settings
         self._mcp_url = mcp_url
         self._limiter = limiter
         self._cache = cache
+        self._usage = usage
 
     def build_agent(
         self, role: str, case_id: str, output_type: type[T], model: Model | None = None
@@ -164,7 +184,8 @@ class AgentRuntime:
             # Agents investigate; only the verifier and reviewers propose actions (R16).
             toolsets.append(mcp.filtered(lambda _ctx, tool: tool.name not in AGENT_HIDDEN_TOOLS))
         return Agent(
-            BudgetedModel(base, self._limiter, self._cache, self._settings.llm_wait_timeout_s),
+            BudgetedModel(base, self._limiter, self._cache, self._settings.llm_wait_timeout_s,
+                          usage=self._usage, case_id=case_id, role=role),
             output_type=output_type,
             instructions=load_prompt(role),
             toolsets=toolsets,

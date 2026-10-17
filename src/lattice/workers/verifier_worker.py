@@ -118,6 +118,7 @@ async def build_handler(ctx) -> Handler:
     from lattice.agents.scripted import SCRIPTED
     from lattice.queue.llm_cache import LLMCache
     from lattice.queue.ratelimit import RateLimiter
+    from lattice.queue.usage import UsageLedger
 
     settings = ctx.settings
     graph = GraphClient.from_settings(settings)  # lives as long as the worker process
@@ -129,6 +130,7 @@ async def build_handler(ctx) -> Handler:
         limiter=RateLimiter(ctx.redis, ctx.keys.limiter(), settings.llm_requests_per_minute,
                             settings.llm_requests_per_day),
         cache=LLMCache(ctx.redis, ctx.keys, settings.llm_cache_ttl_s, settings.llm_cache_enabled),
+        usage=UsageLedger(ctx.redis, ctx.keys),
     )
 
     async def narrate_case(case_id: str, report: CircuitReport) -> Narrative:

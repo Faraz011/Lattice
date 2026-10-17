@@ -41,6 +41,14 @@ class AlertOutcome(BaseModel):
     unledgered_ids: list[str] = []
     seconds: float | None = None
     error: str | None = None
+    # Run facts for the R21 statistics (U15).
+    mode: str = "orchestrated"
+    rejected_citations: int = 0
+    tool_calls: dict[str, int] = {}
+    usage: dict[str, dict[str, int]] = {}  # role -> requests, cached, input/output tokens
+
+    def total(self, field: str) -> int:
+        return sum(counts.get(field, 0) for counts in self.usage.values())
 
     @property
     def flagged(self) -> bool:
