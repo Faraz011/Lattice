@@ -330,7 +330,12 @@ input:focus-visible { outline-offset: 0; }
 }
 .id-link:hover:not(:disabled) { background: var(--paper-deep); }
 
-.counterfactuals h3, .approval h3 { font-size: var(--step-0); font-weight: 700; }
+.counterfactuals h3, .approval h3, .attribution h3 { font-size: var(--step-0);
+  font-weight: 700; }
+.attribution { display: flex; flex-direction: column; gap: 0.5rem; font-size: var(--step--1); }
+.sources { display: flex; flex-direction: column; gap: 0.25rem; }
+.sources li { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; align-items: baseline; }
+.sources .weight { min-width: 3.5rem; font-weight: 700; }
 .counterfactuals ul { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
 .counterfactuals li { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; align-items: center; }
 .counterfactuals > p { margin-top: 0.5rem; }

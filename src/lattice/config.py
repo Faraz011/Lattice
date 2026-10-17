@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     risk_threshold: float = Field(default=0.6, gt=0, lt=1)
     # Per-detector weights for the risk scorer; detectors not named keep weight 1.0 (KTD7).
     detector_weights: dict[str, float] = Field(default_factory=dict)
+    # LLM attribution for tier 2-3 proposals (U17): judge calls per case (0 turns it off), and
+    # the most tool results it weighs.
+    llm_attribution_samples: int = Field(default=16, ge=0)
+    llm_attribution_max_sources: int = Field(default=12, ge=1)
 
     # Render passes a private service's address as a bare host, with no scheme or port.
     @field_validator("neo4j_uri")

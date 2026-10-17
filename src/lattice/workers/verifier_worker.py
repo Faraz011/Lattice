@@ -9,6 +9,7 @@ Steps for one verify job:
 """
 
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from lattice.agents.narrator import Narrative, template_narrative
 from lattice.agents.schemas import Finding
@@ -17,6 +18,7 @@ from lattice.cases.store import CaseStore
 from lattice.cases.views import record_case
 from lattice.config import Settings
 from lattice.explain.citations import check_against_ledger, load_ledger, reverify
+from lattice.explain.llm_attribution import LLMAttribution, attribute_case
 from lattice.explain.report import CircuitReport, build_report
 from lattice.explain.verdict import Outcome, decide
 from lattice.graph.client import GraphClient
@@ -27,6 +29,8 @@ from lattice.queue.streams import Handler
 from lattice.scoring.scorer import Scorer
 
 Narrate = Callable[[str, CircuitReport], Awaitable[Narrative]]
+# (case, result_ids the kept claims cited, report) -> what the LLM's judgement leaned on.
+Attribute = Callable[[dict[str, Any], list[str], CircuitReport], Awaitable[LLMAttribution]]
 
 # How a case reaches `verifying` from wherever it is.
 ROUTE_TO_VERIFYING = {
@@ -42,7 +46,8 @@ async def _template(case_id: str, report: CircuitReport) -> Narrative:
 
 
 def make_handler(
-    graph: GraphClient, events: EventStream, settings: Settings, narrate: Narrate = _template
+    graph: GraphClient, events: EventStream, settings: Settings, narrate: Narrate = _template,
+    attribute: Attribute | None = None,
 ) -> Handler:
     cases = CaseStore(graph)
     scorer = Scorer.from_settings(settings)
@@ -71,6 +76,10 @@ def make_handler(
         if outcome.status != "closed_no_action":
             report = build_report(evidence, scorer)
             narrative = await narrate(case["id"], report)
+            if outcome.status == "awaiting_approval" and attribute is not None:
+                # A tier 2-3 action will be proposed: show what the LLM's judgement leaned on.
+                cited = list(dict.fromkeys(r for c in kept for r in c.result_ids))
+                report.llm_attribution = await attribute(case, cited, report)
 
         await graph.write(
             """
@@ -122,11 +131,9 @@ async def build_handler(ctx) -> Handler:
 
     settings = ctx.settings
     graph = GraphClient.from_settings(settings)  # lives as long as the worker process
-    if model_for_role("narrator", settings) == SCRIPTED:
-        return make_handler(graph, ctx.events, settings)  # the template writes the narrative
     runtime = AgentRuntime(
         settings,
-        mcp_url=None,  # the narrator writes from the report alone
+        mcp_url=None,  # the narrator and the judge work from what they are given
         limiter=RateLimiter(ctx.redis, ctx.keys.limiter(), settings.llm_requests_per_minute,
                             settings.llm_requests_per_day),
         cache=LLMCache(ctx.redis, ctx.keys, settings.llm_cache_ttl_s, settings.llm_cache_enabled),
@@ -136,4 +143,13 @@ async def build_handler(ctx) -> Handler:
     async def narrate_case(case_id: str, report: CircuitReport) -> Narrative:
         return await narrate(runtime, case_id, report)
 
-    return make_handler(graph, ctx.events, settings, narrate_case)
+    async def attribute_verdict(case: dict[str, Any], cited: list[str],
+                                report: CircuitReport) -> LLMAttribution:
+        return await attribute_case(graph, runtime, case, cited, report.circuit.circuit_edges,
+                                    settings.llm_attribution_samples,
+                                    settings.llm_attribution_max_sources)
+
+    scripted = model_for_role("narrator", settings) == SCRIPTED
+    return make_handler(graph, ctx.events, settings,
+                        _template if scripted else narrate_case,  # scripted: the template
+                        attribute_verdict if settings.llm_attribution_samples else None)

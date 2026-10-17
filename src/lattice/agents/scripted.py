@@ -7,6 +7,7 @@ ledger, real verifier) so the demo and the UI can be exercised without an API ke
 - investigator: looks up the seed account, runs the hypothesis's pattern tool, and reports
   `supports` when the pattern matches from a non-business account, citing exactly what the tools
   returned;
+- judge (U17 attribution): suspicious when a kept pattern-match result returned transfers;
 - narrator: not scripted; the verifier uses the deterministic template instead.
 
 Every verdict still comes from the risk scorer, so the circuit and counterfactuals are real.
@@ -118,10 +119,20 @@ def _investigate(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse
     return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, report)])
 
 
+def _judge(prompt: str) -> dict:
+    """Suspicious when a kept pattern-match result returned transfers."""
+    blocks = prompt.split("\n\n[")
+    matched = any("graph_match_pattern" in b and "- transfer " in b for b in blocks)
+    return {"suspicious": matched, "probability": 0.85 if matched else 0.15}
+
+
 def _respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     if not info.output_tools:
         return ModelResponse(parts=[TextPart("")])
     schema = json.dumps(info.output_tools[0].parameters_json_schema)
+    if '"probability"' in schema:
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name,
+                                                 _judge(_prompt(messages)))])
     if '"hypotheses"' in schema:
         return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, {
             "hypotheses": HYPOTHESES, "rationale": "scripted run: the same four every time"})])
