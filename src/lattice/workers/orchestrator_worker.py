@@ -114,6 +114,7 @@ async def build_handler(ctx) -> Handler:
     from lattice.queue.llm_cache import LLMCache
     from lattice.queue.ratelimit import RateLimiter
     from lattice.queue.streams import JobQueue
+    from lattice.queue.usage import UsageLedger
 
     settings = ctx.settings
     graph = GraphClient.from_settings(settings)  # lives as long as the worker process
@@ -123,6 +124,7 @@ async def build_handler(ctx) -> Handler:
         limiter=RateLimiter(ctx.redis, ctx.keys.limiter(), settings.llm_requests_per_minute,
                             settings.llm_requests_per_day),
         cache=LLMCache(ctx.redis, ctx.keys, settings.llm_cache_ttl_s, settings.llm_cache_enabled),
+        usage=UsageLedger(ctx.redis, ctx.keys),
     )
 
     async def summarise(case: dict[str, Any]) -> str:

@@ -241,6 +241,31 @@ async def test_a_cache_hit_skips_the_model_and_the_limiter():
     assert first.output == second.output
 
 
+class RecordingUsage:
+    def __init__(self) -> None:
+        self.added: list[tuple[str, str, dict]] = []
+
+    async def add(self, case_id, role, **counts):
+        self.added.append((case_id, role, counts))
+
+
+async def test_each_model_request_and_cache_hit_is_counted_for_its_case_and_role():
+    def answer(messages, info: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, REPORT)])
+
+    usage, cache = RecordingUsage(), DictCache()
+    runtime = AgentRuntime(settings(), mcp_url=None, cache=cache, usage=usage)
+    await runtime.run("investigator", "case_1", "same prompt", FindingReport, partial,
+                      model=FunctionModel(answer))
+    await runtime.run("investigator", "case_2", "same prompt", FindingReport, partial,
+                      model=FunctionModel(answer))
+
+    (first_case, first_role, first), (second_case, _, second) = usage.added
+    assert (first_case, first_role, first["requests"]) == ("case_1", "investigator", 1)
+    assert first["input_tokens"] > 0 and first["output_tokens"] > 0
+    assert (second_case, second) == ("case_2", {"cached": 1})
+
+
 @pytest.mark.parametrize(
     ("model", "expected"),
     [

@@ -6,7 +6,7 @@
 from contextlib import asynccontextmanager
 
 import redis.asyncio as redis
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from lattice.api import routes_actions, routes_alerts, routes_cases
@@ -18,6 +18,7 @@ from lattice.graph.client import GraphClient
 from lattice.graph.schema import apply_schema
 from lattice.queue.events import EventStream
 from lattice.queue.jobs import Keys
+from lattice.queue.ratelimit import RateLimiter
 from lattice.queue.streams import JobQueue
 
 
@@ -59,6 +60,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/health")
     async def health() -> dict:
         return {"ok": True}
+
+    @app.get("/budget")
+    async def budget(request: Request) -> dict:
+        """The shared model budget and the daily case cap, as the evaluation tools read them."""
+        api: ApiState = request.app.state.api
+        limiter = RateLimiter(api.redis, api.keys.limiter(), api.settings.llm_requests_per_minute,
+                              api.settings.llm_requests_per_day)
+        counts = await api.cases.counts()
+        return {"per_minute": api.settings.llm_requests_per_minute,
+                "per_day": api.settings.llm_requests_per_day,
+                "remaining_today": await limiter.remaining_today(),
+                "max_cases_per_day": api.settings.max_cases_per_day,
+                "cases_today": counts["today"],
+                "case_room": max(0, api.settings.max_cases_per_day - counts["today"])}
 
     return app
 

@@ -45,14 +45,7 @@ class CaseStore:
         if not alerts:
             raise UnknownAlert(f"no alert {alert_id}")
 
-        counts = (await self._graph.read(
-            """
-            MATCH (c:Case)
-            RETURN count(CASE WHEN c.active_key IS NOT NULL THEN 1 END) AS active,
-                   count(CASE WHEN c.created_at >= datetime() - duration('P1D') THEN 1 END)
-                     AS today
-            """
-        ))[0]
+        counts = await self.counts()
         if counts["active"] >= max_active:
             raise CapExceeded(f"{counts['active']} investigations are already open "
                               f"(limit {max_active})")
@@ -78,6 +71,17 @@ class CaseStore:
             mode=mode,
         )
         return dict(rows[0]["c"]), rows[0]["created"]
+
+    async def counts(self) -> dict[str, int]:
+        """Open cases, and cases started in the last 24 hours: what the caps are checked on."""
+        return (await self._graph.read(
+            """
+            MATCH (c:Case)
+            RETURN count(CASE WHEN c.active_key IS NOT NULL THEN 1 END) AS active,
+                   count(CASE WHEN c.created_at >= datetime() - duration('P1D') THEN 1 END)
+                     AS today
+            """
+        ))[0]
 
     async def get(self, case_id: str) -> dict[str, Any]:
         rows = await self._graph.read("MATCH (c:Case {id: $id}) RETURN c", id=case_id)

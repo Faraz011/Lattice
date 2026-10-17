@@ -18,6 +18,7 @@ from lattice.queue.jobs import Job
 from lattice.queue.llm_cache import LLMCache
 from lattice.queue.ratelimit import RateLimiter
 from lattice.queue.streams import Handler
+from lattice.queue.usage import UsageLedger
 
 Investigate = Callable[[HypothesisBrief, OnEvent], Awaitable[Finding]]
 SaveFindings = Callable[[str, list[Finding]], Awaitable[None]]
@@ -95,6 +96,7 @@ async def build_handler(ctx) -> Handler:
         limiter=RateLimiter(ctx.redis, ctx.keys.limiter(), settings.llm_requests_per_minute,
                             settings.llm_requests_per_day),
         cache=LLMCache(ctx.redis, ctx.keys, settings.llm_cache_ttl_s, settings.llm_cache_enabled),
+        usage=UsageLedger(ctx.redis, ctx.keys),
     )
     store = CaseStore(GraphClient.from_settings(settings))
 

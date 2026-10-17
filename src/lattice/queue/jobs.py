@@ -71,6 +71,9 @@ class Keys:
     def cache(self, digest: str) -> str:
         return f"{self.namespace}:llm:cache:{digest}"
 
+    def usage(self, case_id: str) -> str:
+        return f"{self.namespace}:usage:{case_id}"
+
     def fanin(self, case_id: str, part: str = "meta") -> str:
         return f"{self.namespace}:fanin:{case_id}:{part}"
 
