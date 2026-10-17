@@ -77,11 +77,29 @@ export interface EdgeDetail {
   ts?: string | null
 }
 
+export interface SourceWeight {
+  result_id: string
+  tool: string
+  weight: number
+  circuit_edges: string[]
+}
+
+export interface LLMAttribution {
+  status: 'complete' | 'partial' | 'insufficient' | 'skipped'
+  samples: number
+  budget: number
+  full_probability: number | null
+  sources: SourceWeight[]
+  agreement: number | null
+  note: string | null
+}
+
 export interface CircuitReport {
   circuit: Circuit
   counterfactuals: { counterfactuals: Counterfactual[]; note: string | null }
   reasons: Record<string, string>
   edges: EdgeDetail[]
+  llm_attribution?: LLMAttribution | null
 }
 
 export interface Narrative {
