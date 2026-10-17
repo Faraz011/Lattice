@@ -55,21 +55,23 @@ class Slice:
 
 
 # IDs carry "ell": `l` is not a hex digit, so they can never collide with generated IDs
-# (a prefix and 16 hex digits) and are easy to pick out.
-def account_id(cluster: str) -> str:
-    return f"acct_ell{cluster}"
+# (a prefix and 16 hex digits) and are easy to pick out. A `tag` (tests only) goes right after
+# "ell"; Elliptic2's own IDs are numeric, so a tag with a letter and an underscore keeps a test's
+# slice apart from a slice someone else loaded into the same Neo4j.
+def account_id(cluster: str, tag: str = "") -> str:
+    return f"acct_ell{tag}{cluster}"
 
 
-def customer_id(cluster: str) -> str:
-    return f"cust_ell{cluster}"
+def customer_id(cluster: str, tag: str = "") -> str:
+    return f"cust_ell{tag}{cluster}"
 
 
-def alert_id(component: str) -> str:
-    return f"alert_ell{component}"
+def alert_id(component: str, tag: str = "") -> str:
+    return f"alert_ell{tag}{component}"
 
 
-def transfer_id(src: str, dst: str) -> str:
-    return "tx_ell" + hashlib.sha256(f"elliptic2:{src}:{dst}".encode()).hexdigest()[:16]
+def transfer_id(src: str, dst: str, tag: str = "") -> str:
+    return f"tx_ell{tag}" + hashlib.sha256(f"elliptic2:{src}:{dst}".encode()).hexdigest()[:16]
 
 
 def _rows(path: Path) -> Iterator[list[str]]:
@@ -97,7 +99,7 @@ def choose_subgraphs(labels: dict[str, str], count: int, seed: int) -> list[str]
 
 
 def build_slice(directory: Path, subgraphs: int = 100, neighbors: int = 25,
-                seed: int = 2) -> Slice:
+                seed: int = 2, tag: str = "") -> Slice:
     components = _rows(directory / "connected_components.csv")
     labels = {row[0]: row[1].strip().lower() for row in components}
     chosen = set(choose_subgraphs(labels, subgraphs, seed))
@@ -130,12 +132,13 @@ def build_slice(directory: Path, subgraphs: int = 100, neighbors: int = 25,
 
     clusters = sorted({c for pair in flows for c in pair} | in_slice)
     batch = GraphBatch(
-        customers=[Customer(id=customer_id(c), name=f"Elliptic2 cluster {c}", kind="entity",
+        customers=[Customer(id=customer_id(c, tag), name=f"Elliptic2 cluster {c}", kind="entity",
                             country="") for c in clusters],
-        accounts=[Account(id=account_id(c), customer_id=customer_id(c), kind="cluster",
+        accounts=[Account(id=account_id(c, tag), customer_id=customer_id(c, tag), kind="cluster",
                           created_at=None, country="") for c in clusters],
-        transfers=[Transfer(id=transfer_id(s, d), src=account_id(s), dst=account_id(d),
-                            amount=None, ts=None, channel="bitcoin") for s, d in flows],
+        transfers=[Transfer(id=transfer_id(s, d, tag), src=account_id(s, tag),
+                            dst=account_id(d, tag), amount=None, ts=None, channel="bitcoin")
+                   for s, d in flows],
     )
 
     cases, alerts = [], []
@@ -146,16 +149,16 @@ def build_slice(directory: Path, subgraphs: int = 100, neighbors: int = 25,
             degree[s] += 1
             degree[d] += 1
         seed_cluster = min(members[cc], key=lambda c: (-degree[c], c))
-        alerts.append(Alert(id=alert_id(cc), seed_account_id=account_id(seed_cluster),
+        alerts.append(Alert(id=alert_id(cc, tag), seed_account_id=account_id(seed_cluster, tag),
                             reason=f"cluster group of {len(members[cc])} referred for review",
                             ts=None))
         suspicious = labels[cc] == "suspicious"
         cases.append(CaseRecord(
             case_id=f"elliptic2-{cc}", category="planted" if suspicious else "decoy",
             kind=CASE_KIND, expected_verdict="suspicious" if suspicious else "benign",
-            seed_account_id=account_id(seed_cluster), alert_id=alert_id(cc),
-            account_ids=sorted(account_id(c) for c in members[cc]),
-            transfer_ids=list(dict.fromkeys(transfer_id(s, d) for s, d in edges)),
+            seed_account_id=account_id(seed_cluster, tag), alert_id=alert_id(cc, tag),
+            account_ids=sorted(account_id(c, tag) for c in members[cc]),
+            transfer_ids=list(dict.fromkeys(transfer_id(s, d, tag) for s, d in edges)),
         ))
     batch.alerts = alerts
     manifest = Manifest(world=WORLD, seed=seed, reporting_threshold=0.0, cases=cases)

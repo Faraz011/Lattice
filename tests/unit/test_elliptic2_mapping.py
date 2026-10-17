@@ -50,6 +50,19 @@ def test_repeated_flows_become_one_transfer():
     assert cc3.transfer_ids == [transfer_id("6", "7"), transfer_id("6", "8")]
 
 
+def test_a_tagged_slice_shares_no_id_with_the_untagged_one():
+    tagged = build_slice(SAMPLE, subgraphs=10, neighbors=3, seed=2, tag="test_")
+
+    def ids(batch):
+        return set(batch.node_ids()) | {t.id for t in batch.transfers}
+
+    assert not ids(tagged.batch) & ids(SLICE.batch)
+    assert len(ids(tagged.batch)) == len(ids(SLICE.batch))
+    assert account_id("1", "test_") == "acct_elltest_1"
+    seeds = {c.seed_account_id for c in tagged.manifest.cases}
+    assert seeds <= {a.id for a in tagged.batch.accounts}
+
+
 def test_labelled_subgraph_members_appear_in_the_manifest():
     cases = {c.case_id: c for c in SLICE.manifest.cases}
 

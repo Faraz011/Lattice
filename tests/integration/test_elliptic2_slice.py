@@ -8,13 +8,26 @@ import pytest
 from lattice.graph.loader import load_batch
 from lattice.graph.schema import apply_schema
 from lattice.graph.subgraph import load_evidence
-from lattice.ingest.elliptic2 import account_id, build_slice, transfer_id
+from lattice.ingest import elliptic2
 from lattice.mcp_server import tools_algo, tools_graph
 from lattice.scoring.scorer import Scorer
 from lattice.workers.orchestrator_worker import structural_summary
 
 SAMPLE = Path(__file__).resolve().parents[1] / "fixtures" / "elliptic2_sample"
-SLICE = build_slice(SAMPLE, subgraphs=10, neighbors=3, seed=2)
+# A tag of this run's own keeps the test's nodes apart from a slice someone else loaded into the
+# same Neo4j (an evaluation, say): the test neither reads that slice nor deletes it.
+TAG = f"test{uuid.uuid4().hex[:8]}_"
+SLICE = elliptic2.build_slice(SAMPLE, subgraphs=10, neighbors=3, seed=2, tag=TAG)
+
+
+def account_id(cluster: str) -> str:
+    return elliptic2.account_id(cluster, TAG)
+
+
+def transfer_id(src: str, dst: str) -> str:
+    return elliptic2.transfer_id(src, dst, TAG)
+
+
 CYCLE = [transfer_id("1", "2"), transfer_id("2", "3"), transfer_id("3", "1")]
 
 
@@ -30,8 +43,9 @@ async def test_loading_twice_changes_nothing(graph, loaded):
     await load_batch(graph, SLICE.batch)
 
     rows = await graph.read(
-        "MATCH (a:Account)-[t:TRANSFER]->() WHERE a.id STARTS WITH 'acct_ell' "
-        "RETURN count(t) AS flows, count(t.amount) AS priced")
+        "MATCH (:Account)-[t:TRANSFER]->() WHERE t.id IN $ids "
+        "RETURN count(t) AS flows, count(t.amount) AS priced",
+        ids=[t.id for t in SLICE.batch.transfers])
     assert rows[0]["flows"] == len(SLICE.batch.transfers)
     assert rows[0]["priced"] == 0  # no amounts were stored
 
