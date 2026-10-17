@@ -24,7 +24,7 @@ describe('LlmAttribution', () => {
     const items = screen.getAllByRole('listitem')
     expect(items[0]).toHaveTextContent('+0.68')
     expect(items[0]).toHaveTextContent('graph match pattern')
-    expect(screen.getByText(/Of the 1 results that hold the scorer's circuit, 1 are/))
+    expect(screen.getByText(/Of the 1 result that holds the\s+scorer's circuit, 1 is among/))
       .toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'holds 2 circuit edges' }))
