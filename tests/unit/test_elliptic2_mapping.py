@@ -82,16 +82,23 @@ def test_the_sample_is_balanced_and_the_same_seed_picks_the_same_subgraphs():
     assert chosen != choose_subgraphs(labels, 20, seed=5)
 
 
-def test_missing_amounts_and_times_give_zero_detector_contribution_not_errors():
+def test_missing_amounts_and_times_give_zero_priced_contribution_not_errors():
     graph = EvidenceGraph.from_batch(SLICE.batch, [t.id for t in SLICE.batch.transfers])
 
     for detector in detectors.DETECTORS.values():
         result = detector(graph)
         assert result.strength == 0.0
 
+    assert Scorer(structural="never").score(graph).score == 0.0
+
+
+def test_structural_detectors_score_the_slice_instead():
+    graph = EvidenceGraph.from_batch(SLICE.batch, [t.id for t in SLICE.batch.transfers])
+
     score = Scorer().score(graph)
-    assert score.score == 0.0
-    assert score.typology is None
+
+    assert score.typology == "structural_cycle"  # cc1 is the loop 1 -> 2 -> 3 -> 1
+    assert set(detectors.DETECTORS).isdisjoint(score.detectors)
 
 
 def test_the_harness_can_run_a_slice_against_its_labels():

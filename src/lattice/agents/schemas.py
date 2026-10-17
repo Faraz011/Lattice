@@ -19,6 +19,14 @@ Typology = Literal[
     "exit_via_mixer",
 ]
 Hypothesis = Typology | Literal["open"]
+# Shapes the scorer can also name when evidence has no amounts or times (scoring/structural.py).
+# Investigators are never briefed on these; they only appear in verdicts.
+StructuralTypology = Literal[
+    "structural_cycle",
+    "structural_fan_in",
+    "structural_fan_out",
+    "structural_dense",
+]
 RunStatus = Literal["complete", "partial", "failed"]
 
 
@@ -84,8 +92,8 @@ class Verdict(BaseModel):
 
     case_id: str
     suspicious: bool
-    typology: Typology | None
-    investigator_typology: Typology | None = None
+    typology: Typology | StructuralTypology | None
+    investigator_typology: Typology | StructuralTypology | None = None
     risk: Literal["low", "medium", "high"]
     score: float = Field(ge=0, le=1)
     confidence: float = Field(ge=0, le=1)

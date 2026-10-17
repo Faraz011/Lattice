@@ -1,5 +1,7 @@
 """Typed settings for every Lattice role, read from LATTICE_* environment variables."""
 
+from typing import Literal
+
 from pydantic import Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -50,6 +52,9 @@ class Settings(BaseSettings):
     risk_threshold: float = Field(default=0.6, gt=0, lt=1)
     # Per-detector weights for the risk scorer; detectors not named keep weight 1.0 (KTD7).
     detector_weights: dict[str, float] = Field(default_factory=dict)
+    # Count- and shape-based detectors: "auto" runs them only on evidence with no amounts or
+    # times (Elliptic2), "always" adds them everywhere, "never" turns them off.
+    structural_detectors: Literal["auto", "always", "never"] = "auto"
 
     # Render passes a private service's address as a bare host, with no scheme or port.
     @field_validator("neo4j_uri")

@@ -86,6 +86,11 @@ class EvidenceGraph:
         read. Flows without them (Elliptic2) contribute nothing rather than failing."""
         return [t for t in self.transfers() if t.amount is not None and t.ts is not None]
 
+    def has_priced_flows(self) -> bool:
+        """Whether any loaded transfer has an amount and a time, removed edges included, so
+        ablating evidence (the circuit, counterfactuals) never changes which detectors run."""
+        return any(t.amount is not None and t.ts is not None for t in self.all_transfers)
+
     def links(self) -> list[DeviceLink]:
         return [link for link in self.all_links if link.id not in self.excluded]
 

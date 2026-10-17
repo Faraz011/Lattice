@@ -70,12 +70,15 @@ async def test_graph_algorithms_run_on_the_slice(graph, loaded):
     assert impact.account_count >= 3
 
 
-async def test_cited_flows_load_as_evidence_and_score_zero_without_failing(graph, loaded):
+async def test_a_cited_cycle_loads_as_evidence_and_the_structural_scorer_flags_it(graph, loaded):
     evidence = await load_evidence(graph, CYCLE)
+    scorer = Scorer()
 
     assert {t.id for t in evidence.transfers()} == set(CYCLE)
     assert all(t.ts is None and t.amount is None for t in evidence.transfers())
-    assert Scorer().score(evidence).score == 0.0
+    assert Scorer(structural="never").score(evidence).score == 0.0
+    result = scorer.score(evidence)
+    assert result.typology == "structural_cycle" and scorer.flags(result)
 
 
 async def test_the_orchestrator_summary_reads_a_cluster(graph, loaded):
