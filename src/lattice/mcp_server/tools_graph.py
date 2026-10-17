@@ -298,21 +298,17 @@ async def _fan(
         min=min_amount,
         max=max_amount,
     )
-    for row in rows:
-        row["ts"] = row["ts"].to_native()
-    window = timedelta(days=window_days)
-    best: list[dict[str, Any]] = []
-    start = 0
-    for end in range(len(rows)):
-        while rows[end]["ts"] - rows[start]["ts"] > window:
-            start += 1
-        current = rows[start : end + 1]
-        if len({r["other"] for r in current}) > len({r["other"] for r in best}):
-            best = current
+    timed = [{**row, "ts": row["ts"].to_native()} for row in rows if row["ts"] is not None]
+    # Data without times (Elliptic2) has no window: take the counterparties overall.
+    best = _densest_window(timed, timedelta(days=window_days)) if timed else rows
     if len({r["other"] for r in best}) < min_count:
         return []
     others = unique([r["other"] for r in best])
-    total = sum(r["amount"] for r in best)
+    total = sum(r["amount"] or 0.0 for r in best)
+    if not timed:
+        return [PatternMatch(node_ids=unique([node_id, *others]), rel_ids=[r["id"] for r in best],
+                             transfer_count=len(best), counterparties=len(others),
+                             total_amount=0.0, span_hours=0.0, context_rel_ids=[])]
     if pattern == "fan_out":  # the deposit that funded the payouts
         context = await graph.read(
             """
@@ -347,6 +343,19 @@ async def _fan(
     ]
 
 
+def _densest_window(rows: list[dict[str, Any]], window: timedelta) -> list[dict[str, Any]]:
+    """The run of time-ordered transfers within `window` that reaches the most counterparties."""
+    best: list[dict[str, Any]] = []
+    start = 0
+    for end in range(len(rows)):
+        while rows[end]["ts"] - rows[start]["ts"] > window:
+            start += 1
+        current = rows[start : end + 1]
+        if len({r["other"] for r in current}) > len({r["other"] for r in best}):
+            best = current
+    return best
+
+
 async def _paths_as_matches(
     graph: GraphClient, query: str, params: dict[str, Any], chain_context: bool = False
 ) -> list[PatternMatch]:
@@ -354,7 +363,7 @@ async def _paths_as_matches(
     matches = []
     for record in records:
         path: Path = record["p"]
-        times = [r["ts"].to_native() for r in path.relationships]
+        times = [r["ts"].to_native() for r in path.relationships if r.get("ts") is not None]
         view = path_view(path)
         context: list[dict[str, Any]] = []
         if chain_context:
@@ -366,8 +375,9 @@ async def _paths_as_matches(
                 rel_ids=view.rel_ids + context_ids,
                 transfer_count=len(view.rel_ids),
                 counterparties=len(set(view.node_ids)) - 1,
-                total_amount=round(sum(r["amount"] for r in path.relationships), 2),
-                span_hours=round((max(times) - min(times)).total_seconds() / 3600, 2),
+                total_amount=round(sum(r.get("amount") or 0.0 for r in path.relationships), 2),
+                span_hours=(round((max(times) - min(times)).total_seconds() / 3600, 2)
+                            if times else 0.0),
                 context_rel_ids=context_ids,
             )
         )

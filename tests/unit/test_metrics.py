@@ -99,3 +99,11 @@ def test_sufficiency_and_comprehensiveness_are_counted_over_circuits():
     ])
 
     assert (metrics.circuits, metrics.sufficient, metrics.comprehensive) == (2, 2, 1)
+
+
+def test_without_injection_pairs_the_twin_target_does_not_apply():
+    metrics = compute([planted("a1", circuit=["tx_1"], supporting=PATTERN)])
+
+    assert target(metrics, "Injection").met is None
+    assert "| Injection pairs with the same verdict | n/a | 100% | n/a |" in render(
+        metrics, [], "t", [])

@@ -18,8 +18,8 @@ class Transfer:
     id: str
     src: str
     dst: str
-    amount: float
-    ts: datetime
+    amount: float | None  # None for data without amounts or times (Elliptic2)
+    ts: datetime | None
     channel: str
 
 
@@ -27,7 +27,7 @@ class Transfer:
 class AccountInfo:
     id: str
     kind: str
-    created_at: datetime
+    created_at: datetime | None
     customer_id: str
 
 
@@ -52,7 +52,7 @@ class EvidenceGraph:
         accounts: dict[str, AccountInfo],
         links: list[DeviceLink],
     ) -> "EvidenceGraph":
-        ordered = tuple(sorted(transfers, key=lambda t: (t.ts, t.id)))
+        ordered = tuple(sorted(transfers, key=lambda t: (t.ts is None, t.ts or datetime.min, t.id)))
         return cls(ordered, dict(accounts), tuple(sorted(links, key=lambda link: link.id)))
 
     @classmethod
@@ -80,6 +80,11 @@ class EvidenceGraph:
 
     def transfers(self) -> list[Transfer]:
         return [t for t in self.all_transfers if t.id not in self.excluded]
+
+    def priced_transfers(self) -> list[Transfer]:
+        """Transfers with an amount and a time: all that amount- and time-based detectors can
+        read. Flows without them (Elliptic2) contribute nothing rather than failing."""
+        return [t for t in self.transfers() if t.amount is not None and t.ts is not None]
 
     def links(self) -> list[DeviceLink]:
         return [link for link in self.all_links if link.id not in self.excluded]
@@ -112,7 +117,7 @@ async def load_evidence(graph: GraphClient, edge_ids: list[str]) -> EvidenceGrap
         ids=transfer_ids,
     )
     transfers = [
-        Transfer(r["id"], r["src"], r["dst"], r["amount"], r["ts"].to_native(), r["channel"])
+        Transfer(r["id"], r["src"], r["dst"], r["amount"], _native(r["ts"]), r["channel"])
         for r in rows
     ]
     link_rows = await graph.read(
@@ -139,7 +144,11 @@ async def load_evidence(graph: GraphClient, edge_ids: list[str]) -> EvidenceGrap
         ids=involved,
     )
     accounts = {
-        r["id"]: AccountInfo(r["id"], r["kind"], r["created_at"].to_native(), r["customer_id"])
+        r["id"]: AccountInfo(r["id"], r["kind"], _native(r["created_at"]), r["customer_id"])
         for r in account_rows
     }
     return EvidenceGraph.build(transfers, accounts, links)
+
+
+def _native(value):
+    return value.to_native() if value is not None else None

@@ -74,7 +74,8 @@ def template_narrative(report: CircuitReport) -> str:
     for edge_id in c.circuit_edges:
         e = by_id[edge_id]
         if e.kind == "transfer":
-            steps.append(f"{e.id} ({e.src} to {e.dst}, {e.amount:,.2f})")
+            amount = f", {e.amount:,.2f}" if e.amount is not None else ""
+            steps.append(f"{e.id} ({e.src} to {e.dst}{amount})")
         else:
             steps.append(f"{e.id} (shared device)")
     parts = [

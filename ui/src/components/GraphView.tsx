@@ -53,7 +53,7 @@ export function graphElements(
     const kind = kinds.get(id) ?? (id.startsWith('dev_') ? 'device' : 'person')
     const classes = [kind === 'device' ? 'device' : 'account', `kind-${kind}`]
     if (id === options.seed) classes.push('seed')
-    let label = kind === 'person' || kind === 'device' ? shortId(id) : `${shortId(id)} (${kind})`
+    let label = ['person', 'device', 'cluster'].includes(kind) ? shortId(id) : `${shortId(id)} (${kind})`
     if (id === options.seed) label = `${label}, alerted`
     return { group: 'nodes', data: { id, label, kind }, classes: classes.join(' ') }
   })

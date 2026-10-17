@@ -77,7 +77,8 @@ async def case_evidence(graph: GraphClient, case_id: str, seed: str | None = Non
     )
     edges = [
         {"id": t["id"], "kind": "transfer", "src": t["src"], "dst": t["dst"],
-         "amount": t["amount"], "ts": t["ts"].to_native().isoformat(), "channel": t["channel"],
+         "amount": t["amount"], "ts": t["ts"].to_native().isoformat() if t["ts"] else None,
+         "channel": t["channel"],
          "sources": sources[t["id"]]}
         for t in transfers
     ] + [

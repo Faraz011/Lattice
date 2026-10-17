@@ -122,7 +122,7 @@ def render_report(outcomes: list[AlertOutcome], *, model: str, world: str,
         for s in stats:
             t = s.metrics.targets[i]
             value = t.value if isinstance(t.value, int) else _pct(t.value)
-            cells.append(f"{value} ({'met' if t.met else 'missed'})")
+            cells.append(f"{value} ({t.verdict})")
         lines.append(_row(target.name, cells) + f" {target.goal} |")
 
     lines += ["", "## Run statistics (R21)", "", header.replace("Target", "Notes"), divider]
