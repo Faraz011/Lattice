@@ -16,7 +16,7 @@ from lattice.workers.orchestrator_worker import structural_summary
 SAMPLE = Path(__file__).resolve().parents[1] / "fixtures" / "elliptic2_sample"
 # A tag of this run's own keeps the test's nodes apart from a slice someone else loaded into the
 # same Neo4j (an evaluation, say): the test neither reads that slice nor deletes it.
-TAG = f"test{uuid.uuid4().hex[:8]}_"
+TAG = f"t{uuid.uuid4().hex[:8]}"
 SLICE = elliptic2.build_slice(SAMPLE, subgraphs=10, neighbors=3, seed=2, tag=TAG)
 
 

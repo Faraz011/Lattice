@@ -34,6 +34,7 @@ import asyncio
 import csv
 import hashlib
 import random
+import re
 import sys
 from collections import defaultdict
 from collections.abc import Iterator
@@ -56,8 +57,12 @@ class Slice:
 
 # IDs carry "ell": `l` is not a hex digit, so they can never collide with generated IDs
 # (a prefix and 16 hex digits) and are easy to pick out. A `tag` (tests only) goes right after
-# "ell"; Elliptic2's own IDs are numeric, so a tag with a letter and an underscore keeps a test's
-# slice apart from a slice someone else loaded into the same Neo4j.
+# "ell". Elliptic2's own IDs are numeric, so a tag that starts with a letter keeps a test's
+# slice apart from a slice someone else loaded into the same Neo4j. Tags are letters and
+# digits only, so a tagged ID is still matched whole by the narrator's and the UI's ID pattern.
+TAG = re.compile(r"[A-Za-z][A-Za-z0-9]*")
+
+
 def account_id(cluster: str, tag: str = "") -> str:
     return f"acct_ell{tag}{cluster}"
 
@@ -100,6 +105,8 @@ def choose_subgraphs(labels: dict[str, str], count: int, seed: int) -> list[str]
 
 def build_slice(directory: Path, subgraphs: int = 100, neighbors: int = 25,
                 seed: int = 2, tag: str = "") -> Slice:
+    if tag and not TAG.fullmatch(tag):
+        raise ValueError(f"tag {tag!r} must be a letter followed by letters or digits")
     components = _rows(directory / "connected_components.csv")
     labels = {row[0]: row[1].strip().lower() for row in components}
     chosen = set(choose_subgraphs(labels, subgraphs, seed))
