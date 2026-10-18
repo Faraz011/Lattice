@@ -10,6 +10,7 @@ import { ApprovalPanel, ReviewPanel, useApprover } from './ApprovalPanel'
 import { Counterfactuals } from './Counterfactuals'
 import { GraphView } from './GraphView'
 import { Inspector } from './Inspector'
+import { LlmAttribution } from './LlmAttribution'
 import { InvestigationTimeline, StageBar } from './InvestigationTimeline'
 import { Narrative } from './Narrative'
 import { VerdictCard } from './VerdictCard'
@@ -128,6 +129,9 @@ export function CaseScreen({ session, replay, onChanged }: Props) {
               {report?.circuit.status === 'circuit' && (
                 <Counterfactuals report={report} active={counterfactual}
                   onToggle={setCounterfactual} />
+              )}
+              {report?.llm_attribution && (
+                <LlmAttribution attribution={report.llm_attribution} onFocus={setSelected} />
               )}
               {status === 'needs_review' && !replay && caseId && (
                 <ReviewPanel approver={approver} onApproverChange={setApprover}

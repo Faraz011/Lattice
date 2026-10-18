@@ -3,14 +3,16 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from './api'
 import { AlertList } from './components/AlertList'
 import { CaseScreen } from './components/CaseScreen'
+import { InterpPanel } from './components/InterpPanel'
 import type { Alert } from './types'
 import { useLiveCase, useReplay } from './useCase'
 
-type Route = { kind: 'none' } | { kind: 'case' | 'replay'; caseId: string }
+type Route = { kind: 'none' } | { kind: 'interp' } | { kind: 'case' | 'replay'; caseId: string }
 
 function readRoute(): Route {
   const [kind, caseId] = window.location.hash.replace(/^#\/?/, '').split('/')
   if ((kind === 'case' || kind === 'replay') && caseId) return { kind, caseId }
+  if (kind === 'interp') return { kind }
   return { kind: 'none' }
 }
 
@@ -85,10 +87,11 @@ export default function App() {
             One investigator for everything
           </label>
         </fieldset>
+        <p><a href="#/interp" className="rail-link">Inside the model</a></p>
         <h2 className="rail-title">Alerts</h2>
         {startError && <p className="error" role="alert">{startError}</p>}
         <AlertList alerts={alerts} error={alertsError}
-          selectedCase={route.kind === 'none' ? null : route.caseId} starting={starting}
+          selectedCase={'caseId' in route ? route.caseId : null} starting={starting}
           onInvestigate={investigate} onOpen={(id) => go('case', id)}
           onReplay={(id) => go('replay', id)} />
       </aside>
@@ -96,6 +99,7 @@ export default function App() {
         {route.kind === 'case' && <LiveCase key={route.caseId} caseId={route.caseId}
           onChanged={loadAlerts} />}
         {route.kind === 'replay' && <ReplayCase key={route.caseId} caseId={route.caseId} />}
+        {route.kind === 'interp' && <InterpPanel />}
         {route.kind === 'none' && (
           <div className="welcome">
             <h1>Pick an alert to investigate</h1>
