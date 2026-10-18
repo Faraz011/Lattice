@@ -18,9 +18,10 @@ How it maps:
 
 - A cluster becomes an Account (kind `cluster`) owned by its own Customer (kind `entity`).
 - A flow becomes a TRANSFER with no amount and no timestamp: Elliptic2's edge features are
-  anonymised. Detectors that need amounts, times or devices contribute zero, so the risk scorer
-  will not flag these cases. Structural tools (neighbours, paths, cycles, PageRank, communities,
-  blast radius) work as usual.
+  anonymised. Detectors that need amounts, times or devices contribute zero; the scorer's
+  structural detectors (cycles, fans, dense groups; scoring/structural.py) score these cases
+  instead. Structural tools (neighbours, paths, cycles, PageRank, communities, blast radius)
+  work as usual.
 - Each sampled subgraph raises one Alert on its best-connected member. The alert text never
   carries the label.
 - The labels become the manifest: suspicious subgraphs are `planted` and licit ones `decoy`,
@@ -37,7 +38,7 @@ import random
 import re
 import sys
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -103,13 +104,22 @@ def choose_subgraphs(labels: dict[str, str], count: int, seed: int) -> list[str]
     return sorted(chosen)
 
 
+def read_labels(directory: Path) -> dict[str, str]:
+    """Subgraph ID to label (licit | suspicious)."""
+    return {row[0]: row[1].strip().lower()
+            for row in _rows(directory / "connected_components.csv")}
+
+
 def build_slice(directory: Path, subgraphs: int = 100, neighbors: int = 25,
-                seed: int = 2, tag: str = "") -> Slice:
+                seed: int = 2, exclude: Collection[str] = (), tag: str = "") -> Slice:
+    """`exclude` keeps named subgraphs out of the sample: a tuning slice leaves out the
+    evaluation slice's subgraphs. `tag` (tests only) marks every ID, as `account_id` says."""
     if tag and not TAG.fullmatch(tag):
         raise ValueError(f"tag {tag!r} must be a letter followed by letters or digits")
-    components = _rows(directory / "connected_components.csv")
-    labels = {row[0]: row[1].strip().lower() for row in components}
-    chosen = set(choose_subgraphs(labels, subgraphs, seed))
+    labels = read_labels(directory)
+    excluded = set(exclude)
+    pool = {cc: label for cc, label in labels.items() if cc not in excluded}
+    chosen = set(choose_subgraphs(pool, subgraphs, seed))
 
     members: dict[str, set[str]] = defaultdict(set)  # ccId -> clusters
     for cluster, cc, *_ in _rows(directory / "nodes.csv"):
@@ -128,9 +138,11 @@ def build_slice(directory: Path, subgraphs: int = 100, neighbors: int = 25,
             internal[cc].append((src, dst))
             flows[(src, dst)] = None
 
-    # The neighbourhood: each member's flows in the background graph, capped per member.
+    # The neighbourhood: each member's flows in the background graph, capped per member. With no
+    # neighbours wanted (a tuning slice), the 196M-row background file is not read at all.
     taken: dict[str, int] = defaultdict(int)
-    for src, dst, *_ in _rows(directory / "background_edges.csv"):
+    background = _rows(directory / "background_edges.csv") if neighbors > 0 else iter(())
+    for src, dst, *_ in background:
         anchor = src if src in in_slice else dst if dst in in_slice else None
         if anchor is None or (src, dst) in flows or taken[anchor] >= neighbors:
             continue

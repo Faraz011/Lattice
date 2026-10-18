@@ -93,13 +93,56 @@ Elliptic2's flow features are anonymised, so the slice has no amounts and no tim
 
 - Structural investigation works: neighbours, paths, cycles, fan-in and fan-out by counterparty
   count, PageRank, communities and blast radius.
-- The risk scorer's detectors all need amounts and times. They contribute zero, so the scorer
-  never flags an Elliptic2 case and no evidence circuit is drawn.
-- When investigators find a structural pattern (a cycle, say), the verifier reports that the
-  investigators and the scorer disagree and sends the case for review.
-- Licit subgraphs close correctly, while suspicious ones are missed. A run on the sample in
-  `tests/fixtures/elliptic2_sample` shows exactly this: 60% decision accuracy, and the one
-  cycle sent for review.
+- The priced detectors (peeling chain, structuring, round trip and the rest) need amounts and
+  times, so they contribute zero. The scorer's structural detectors
+  (`src/lattice/scoring/structural.py`) take over whenever the cited evidence has no priced
+  flows at all:
 
-Flagging real Elliptic2 cases needs a structural scorer: detectors that work on counts and
-shapes without amounts or times, tuned against Elliptic2's labels. That is follow-up work.
+  | Detector | Fires on | Strength | Weight |
+  | --- | --- | --- | --- |
+  | `structural_cycle` | a loop through 3 to 6 accounts back to the start | 1.0 | 0.75 |
+  | `structural_fan_out` | one account paying many distinct counterparties | (n - 4) / 8 | 0.3 |
+  | `structural_fan_in` | one account paid by many distinct counterparties | (n - 4) / 8 | 0.3 |
+  | `structural_dense` | 4+ accounts with most possible links among them | (density - 0.5) / 0.4 | 0.6 |
+
+  A cycle flags on its own. A fan never does, even fanning both ways (exchanges and services
+  are hubs). A two-account back-and-forth is not a cycle. `LATTICE_STRUCTURAL_DETECTORS`
+  (`auto`, `always`, `never`) overrides the gate, and `LATTICE_DETECTOR_WEIGHTS` the weights.
+  The synthetic worlds are fully priced, so their scores do not change.
+- The scorer still sees only what investigators cite. A subgraph whose shape no investigator
+  reports cannot be flagged.
+
+### Results on the sample
+
+[harness-elliptic2-sample-scripted.md](harness-elliptic2-sample-scripted.md): the five-subgraph
+sample in `tests/fixtures/elliptic2_sample`, orchestrated mode, scripted model.
+
+- 2 of 5 cases suspicious, 3 licit. Flagged: 1 (cc1, the loop 1 -> 2 -> 3 -> 1, score 0.75).
+  Precision 1 of 1 flagged; recall 1 of 2 suspicious; 0 of 3 licit flagged. Decision accuracy
+  80%, up from 60% before the structural detectors.
+- cc1's circuit is exactly the three loop edges: sufficient, comprehensive, and each single
+  edge is a counterfactual.
+- Missed: cc3 (cluster 6 paying 7 and 8, fed by 9). The scripted investigators cite nothing
+  there. Their fan-out check asks for 8 counterparties and their chain check needs times, so
+  the evidence graph is empty and no detector can fire. A model investigator that cites the
+  small fan would still score it below the threshold: a three-way fan is weak evidence.
+- Five subgraphs are a smoke test, not a measurement. The tuning run below had to use the same
+  five, so these numbers are not independent of the weights.
+
+### Tuning the structural weights
+
+```bash
+uv run python -m lattice.eval.tune_structural --dir path/to/elliptic2 --subgraphs 2000
+```
+
+The tuning slice is drawn with its own seed (`--seed`, default 7) from the subgraphs the
+evaluation slice (`--eval-seed 2`, `--eval-subgraphs 100`, as the ingest above builds it) did
+not pick, so tuning never sees an evaluation subgraph. Each subgraph is scored offline on its
+internal flows. The tool prints each detector's firing rate by label, the current and best
+weights by balanced accuracy, and a `LATTICE_DETECTOR_WEIGHTS` line to apply.
+
+The weights above are priors. The real dataset was not available here, and the sample's five
+subgraphs all belong to the evaluation slice, so the only tuning run used `--allow-overlap`
+(which the output flags as a smoke test). On the sample, only the cycle detector separates the
+labels (1 of 2 suspicious, 0 of 3 licit); the fan and dense weights are untested. Rerun the
+tuner on the full download before quoting Elliptic2 results.
