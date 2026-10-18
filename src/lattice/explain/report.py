@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from lattice.explain.circuit import Circuit, find_circuit
 from lattice.explain.counterfactual import CounterfactualResult, find_counterfactuals
+from lattice.explain.llm_attribution import LLMAttribution
 from lattice.graph.subgraph import EvidenceGraph
 from lattice.scoring.scorer import Scorer
 
@@ -26,6 +27,8 @@ class CircuitReport(BaseModel):
     # Facts for every edge the report names: supporting evidence (which includes the circuit)
     # and the counterfactual removals.
     edges: list[EdgeDetail]
+    # Which tool results the LLM's own judgement leaned on; tier 2-3 proposals only (U17).
+    llm_attribution: LLMAttribution | None = None
 
 
 def build_report(graph: EvidenceGraph, scorer: Scorer) -> CircuitReport:

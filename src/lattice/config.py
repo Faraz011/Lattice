@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     # Count- and shape-based detectors: "auto" runs them only on evidence with no amounts or
     # times (Elliptic2), "always" adds them everywhere, "never" turns them off.
     structural_detectors: Literal["auto", "always", "never"] = "auto"
+    # LLM attribution for tier 2-3 proposals (U17): judge calls per case (0 turns it off), and
+    # the most tool results it weighs.
+    llm_attribution_samples: int = Field(default=16, ge=0)
+    llm_attribution_max_sources: int = Field(default=12, ge=1)
 
     # Render passes a private service's address as a bare host, with no scheme or port.
     @field_validator("neo4j_uri")

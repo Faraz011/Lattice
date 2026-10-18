@@ -1,0 +1,1509 @@
+{
+ "case_id": "case_aa7780b9e6504f40",
+ "events": [
+  {
+   "id": "1792170959655-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "case_started",
+   "data": {
+    "alert_id": "alert_03d1e6b117697078",
+    "mode": "orchestrated"
+   },
+   "ts": "2026-10-16T17:15:59.992737Z"
+  },
+  {
+   "id": "1792170960623-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "hypotheses_chosen",
+   "data": {
+    "hypotheses": [
+     "peeling_chain",
+     "fan_in_structuring",
+     "fan_out",
+     "round_trip"
+    ],
+    "summary": "- seed account kind: person, opened 2021-01-28\n- inbound: 1 transfers, total 62,026.85, largest 62,026.85, 1 counterparties (exchange: 1)\n- outbound: 2 transfers, total 62,026.85, largest 57,870.11, 2 counterparties (person: 2)\n- activity spans 0.8 days\n- inbound transfers between 8,000 and 10,000: 0\n- devices used: 0"
+   },
+   "ts": "2026-10-16T17:16:01.014650Z"
+  },
+  {
+   "id": "1792170960638-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "investigation_started",
+   "data": {
+    "job_id": "7bc673b5acff438387273b9036b6ae14",
+    "hypothesis": "fan_in_structuring",
+    "worker": "LAPTOP-6RCD4MU1-24700"
+   },
+   "ts": "2026-10-16T17:16:01.036125Z"
+  },
+  {
+   "id": "1792170960640-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "investigation_started",
+   "data": {
+    "job_id": "af0b533722684173a1b427d67ea73673",
+    "hypothesis": "peeling_chain",
+    "worker": "LAPTOP-6RCD4MU1-15264"
+   },
+   "ts": "2026-10-16T17:16:01.037138Z"
+  },
+  {
+   "id": "1792170961759-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "tool_called",
+   "data": {
+    "tool": "graph_get_node",
+    "args": {
+     "node_id": "acct_67e8a1346d2b1c9a"
+    },
+    "hypothesis": "peeling_chain"
+   },
+   "ts": "2026-10-16T17:16:02.210507Z"
+  },
+  {
+   "id": "1792170961771-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "tool_called",
+   "data": {
+    "tool": "graph_get_node",
+    "args": {
+     "node_id": "acct_67e8a1346d2b1c9a"
+    },
+    "hypothesis": "fan_in_structuring"
+   },
+   "ts": "2026-10-16T17:16:02.222126Z"
+  },
+  {
+   "id": "1792170962558-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "tool_result",
+   "data": {
+    "tool": "graph_get_node",
+    "result_id": "led_fb681b920a0f499f",
+    "hypothesis": "fan_in_structuring"
+   },
+   "ts": "2026-10-16T17:16:03.041255Z"
+  },
+  {
+   "id": "1792170962561-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "tool_result",
+   "data": {
+    "tool": "graph_get_node",
+    "result_id": "led_6527716411dc43a4",
+    "hypothesis": "peeling_chain"
+   },
+   "ts": "2026-10-16T17:16:03.041255Z"
+  },
+  {
+   "id": "1792170962585-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "tool_called",
+   "data": {
+    "tool": "graph_match_pattern",
+    "args": {
+     "node_id": "acct_67e8a1346d2b1c9a",
+     "pattern": "fan_in",
+     "min_amount": 8000,
+     "max_amount": 9999.99
+    },
+    "hypothesis": "fan_in_structuring"
+   },
+   "ts": "2026-10-16T17:16:03.075576Z"
+  },
+  {
+   "id": "1792170962586-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "tool_called",
+   "data": {
+    "tool": "graph_match_pattern",
+    "args": {
+     "node_id": "acct_67e8a1346d2b1c9a",
+     "pattern": "chain"
+    },
+    "hypothesis": "peeling_chain"
+   },
+   "ts": "2026-10-16T17:16:03.075576Z"
+  },
+  {
+   "id": "1792170962664-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "tool_result",
+   "data": {
+    "tool": "graph_match_pattern",
+    "result_id": "led_ef531f5ea3734332",
+    "hypothesis": "fan_in_structuring"
+   },
+   "ts": "2026-10-16T17:16:03.157794Z"
+  },
+  {
+   "id": "1792170962689-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "finding",
+   "data": {
+    "job_id": "7bc673b5acff438387273b9036b6ae14",
+    "hypothesis": "fan_in_structuring",
+    "finding": {
+     "hypothesis": "fan_in_structuring",
+     "verdict": "refutes",
+     "confidence": 0.6,
+     "summary": "Scripted check: the pattern did not match from the seed account.",
+     "claims": [
+      {
+       "statement": "seed account record",
+       "rel_ids": [],
+       "node_ids": [
+        "acct_67e8a1346d2b1c9a"
+       ],
+       "result_ids": [
+        "led_fb681b920a0f499f"
+       ]
+      }
+     ],
+     "status": "complete",
+     "status_reason": null
+    }
+   },
+   "ts": "2026-10-16T17:16:03.182279Z"
+  },
+  {
+   "id": "1792170962707-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "investigation_started",
+   "data": {
+    "job_id": "7d39bef4e8f440cf80183bec3dfd6419",
+    "hypothesis": "fan_out",
+    "worker": "LAPTOP-6RCD4MU1-24700"
+   },
+   "ts": "2026-10-16T17:16:03.201094Z"
+  },
+  {
+   "id": "1792170962768-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "tool_result",
+   "data": {
+    "tool": "graph_match_pattern",
+    "result_id": "led_43a4af5c07b44ba0",
+    "hypothesis": "peeling_chain"
+   },
+   "ts": "2026-10-16T17:16:03.265606Z"
+  },
+  {
+   "id": "1792170962801-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "finding",
+   "data": {
+    "job_id": "af0b533722684173a1b427d67ea73673",
+    "hypothesis": "peeling_chain",
+    "finding": {
+     "hypothesis": "peeling_chain",
+     "verdict": "supports",
+     "confidence": 0.7,
+     "summary": "Scripted check: chain matched from the seed account.",
+     "claims": [
+      {
+       "statement": "graph_match_pattern chain matched from acct_67e8a1346d2b1c9a",
+       "rel_ids": [
+        "tx_60ea791d0a3286af",
+        "tx_6723a9fcf3785094",
+        "tx_41ef992842b1acf1",
+        "tx_827a8670465ad350",
+        "tx_c8abb1e67e948864",
+        "tx_b4e4eb2e80ae76ea",
+        "tx_45d62693e8017c77",
+        "tx_5cf6428f880796be",
+        "tx_5ee7c4b83ab8ee7d",
+        "tx_808627e143d3fe4c",
+        "tx_8139504f225c36fe",
+        "tx_92c2137c2feae70d",
+        "tx_a554d7eeb03d9382"
+       ],
+       "node_ids": [],
+       "result_ids": [
+        "led_43a4af5c07b44ba0"
+       ]
+      },
+      {
+       "statement": "seed account record",
+       "rel_ids": [],
+       "node_ids": [
+        "acct_67e8a1346d2b1c9a"
+       ],
+       "result_ids": [
+        "led_6527716411dc43a4"
+       ]
+      }
+     ],
+     "status": "complete",
+     "status_reason": null
+    }
+   },
+   "ts": "2026-10-16T17:16:03.301520Z"
+  },
+  {
+   "id": "1792170962817-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "investigation_started",
+   "data": {
+    "job_id": "5939f2f6ecc04389af0316818bf7a75b",
+    "hypothesis": "round_trip",
+    "worker": "LAPTOP-6RCD4MU1-15264"
+   },
+   "ts": "2026-10-16T17:16:03.313752Z"
+  },
+  {
+   "id": "1792170963032-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "tool_called",
+   "data": {
+    "tool": "graph_get_node",
+    "args": {
+     "node_id": "acct_67e8a1346d2b1c9a"
+    },
+    "hypothesis": "fan_out"
+   },
+   "ts": "2026-10-16T17:16:03.542439Z"
+  },
+  {
+   "id": "1792170963098-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "tool_result",
+   "data": {
+    "tool": "graph_get_node",
+    "result_id": "led_b413cb4e864e4bb7",
+    "hypothesis": "fan_out"
+   },
+   "ts": "2026-10-16T17:16:03.612628Z"
+  },
+  {
+   "id": "1792170963121-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "tool_called",
+   "data": {
+    "tool": "graph_match_pattern",
+    "args": {
+     "node_id": "acct_67e8a1346d2b1c9a",
+     "pattern": "fan_out",
+     "min_count": 8
+    },
+    "hypothesis": "fan_out"
+   },
+   "ts": "2026-10-16T17:16:03.636931Z"
+  },
+  {
+   "id": "1792170963147-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "tool_called",
+   "data": {
+    "tool": "graph_get_node",
+    "args": {
+     "node_id": "acct_67e8a1346d2b1c9a"
+    },
+    "hypothesis": "round_trip"
+   },
+   "ts": "2026-10-16T17:16:03.662450Z"
+  },
+  {
+   "id": "1792170963198-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "tool_result",
+   "data": {
+    "tool": "graph_match_pattern",
+    "result_id": "led_773b982950cb4a13",
+    "hypothesis": "fan_out"
+   },
+   "ts": "2026-10-16T17:16:03.712944Z"
+  },
+  {
+   "id": "1792170963234-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "tool_result",
+   "data": {
+    "tool": "graph_get_node",
+    "result_id": "led_44a88cee9b164d9d",
+    "hypothesis": "round_trip"
+   },
+   "ts": "2026-10-16T17:16:03.752377Z"
+  },
+  {
+   "id": "1792170967878-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "tool_called",
+   "data": {
+    "tool": "graph_match_pattern",
+    "args": {
+     "node_id": "acct_67e8a1346d2b1c9a",
+     "pattern": "cycle"
+    },
+    "hypothesis": "round_trip"
+   },
+   "ts": "2026-10-16T17:16:07.130006Z"
+  },
+  {
+   "id": "1792170967936-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "tool_result",
+   "data": {
+    "tool": "graph_match_pattern",
+    "result_id": "led_f45950add09c476c",
+    "hypothesis": "round_trip"
+   },
+   "ts": "2026-10-16T17:16:07.191328Z"
+  },
+  {
+   "id": "1792170972604-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "finding",
+   "data": {
+    "job_id": "7d39bef4e8f440cf80183bec3dfd6419",
+    "hypothesis": "fan_out",
+    "finding": {
+     "hypothesis": "fan_out",
+     "verdict": "refutes",
+     "confidence": 0.6,
+     "summary": "Scripted check: the pattern did not match from the seed account.",
+     "claims": [
+      {
+       "statement": "seed account record",
+       "rel_ids": [],
+       "node_ids": [
+        "acct_67e8a1346d2b1c9a"
+       ],
+       "result_ids": [
+        "led_b413cb4e864e4bb7"
+       ]
+      }
+     ],
+     "status": "complete",
+     "status_reason": null
+    }
+   },
+   "ts": "2026-10-16T17:16:12.068342Z"
+  },
+  {
+   "id": "1792170978614-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "finding",
+   "data": {
+    "job_id": "5939f2f6ecc04389af0316818bf7a75b",
+    "hypothesis": "round_trip",
+    "finding": {
+     "hypothesis": "round_trip",
+     "verdict": "refutes",
+     "confidence": 0.6,
+     "summary": "Scripted check: the pattern did not match from the seed account.",
+     "claims": [
+      {
+       "statement": "seed account record",
+       "rel_ids": [],
+       "node_ids": [
+        "acct_67e8a1346d2b1c9a"
+       ],
+       "result_ids": [
+        "led_44a88cee9b164d9d"
+       ]
+      }
+     ],
+     "status": "complete",
+     "status_reason": null
+    }
+   },
+   "ts": "2026-10-16T17:16:18.358786Z"
+  },
+  {
+   "id": "1792170979139-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "verification_started",
+   "data": {},
+   "ts": "2026-10-16T17:16:18.910978Z"
+  },
+  {
+   "id": "1792170979354-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "verdict",
+   "data": {
+    "outcome": "awaiting_approval",
+    "verdict": {
+     "case_id": "case_aa7780b9e6504f40",
+     "suspicious": true,
+     "typology": "peeling_chain",
+     "investigator_typology": "peeling_chain",
+     "risk": "high",
+     "score": 1.0,
+     "confidence": 0.7,
+     "claims": [
+      {
+       "statement": "graph_match_pattern chain matched from acct_67e8a1346d2b1c9a",
+       "rel_ids": [
+        "tx_60ea791d0a3286af",
+        "tx_6723a9fcf3785094",
+        "tx_41ef992842b1acf1",
+        "tx_827a8670465ad350",
+        "tx_c8abb1e67e948864",
+        "tx_b4e4eb2e80ae76ea",
+        "tx_45d62693e8017c77",
+        "tx_5cf6428f880796be",
+        "tx_5ee7c4b83ab8ee7d",
+        "tx_808627e143d3fe4c",
+        "tx_8139504f225c36fe",
+        "tx_92c2137c2feae70d",
+        "tx_a554d7eeb03d9382"
+       ],
+       "node_ids": [],
+       "result_ids": [
+        "led_43a4af5c07b44ba0"
+       ]
+      },
+      {
+       "statement": "seed account record",
+       "rel_ids": [],
+       "node_ids": [
+        "acct_67e8a1346d2b1c9a"
+       ],
+       "result_ids": [
+        "led_6527716411dc43a4"
+       ]
+      },
+      {
+       "statement": "seed account record",
+       "rel_ids": [],
+       "node_ids": [
+        "acct_67e8a1346d2b1c9a"
+       ],
+       "result_ids": [
+        "led_fb681b920a0f499f"
+       ]
+      },
+      {
+       "statement": "seed account record",
+       "rel_ids": [],
+       "node_ids": [
+        "acct_67e8a1346d2b1c9a"
+       ],
+       "result_ids": [
+        "led_b413cb4e864e4bb7"
+       ]
+      },
+      {
+       "statement": "seed account record",
+       "rel_ids": [],
+       "node_ids": [
+        "acct_67e8a1346d2b1c9a"
+       ],
+       "result_ids": [
+        "led_44a88cee9b164d9d"
+       ]
+      }
+     ],
+     "rejected_citations": [],
+     "unverified_ids": [],
+     "needs_review": false,
+     "review_reason": null,
+     "notes": []
+    },
+    "score": {
+     "score": 1.0,
+     "typology": "peeling_chain",
+     "detectors": {
+      "peeling_chain": 1.0
+     },
+     "reasons": {
+      "peeling_chain": "6 forwarding hops that skim"
+     }
+    },
+    "circuit": {
+     "circuit": {
+      "status": "circuit",
+      "threshold": 0.6,
+      "full_score": 1.0,
+      "typology": "peeling_chain",
+      "detectors": {
+       "peeling_chain": 1.0
+      },
+      "circuit_edges": [
+       "tx_6723a9fcf3785094",
+       "tx_5ee7c4b83ab8ee7d",
+       "tx_41ef992842b1acf1",
+       "tx_808627e143d3fe4c",
+       "tx_827a8670465ad350",
+       "tx_a554d7eeb03d9382",
+       "tx_c8abb1e67e948864"
+      ],
+      "supporting_edges": [
+       "tx_5cf6428f880796be",
+       "tx_45d62693e8017c77",
+       "tx_60ea791d0a3286af",
+       "tx_92c2137c2feae70d",
+       "tx_6723a9fcf3785094",
+       "tx_5ee7c4b83ab8ee7d",
+       "tx_41ef992842b1acf1",
+       "tx_808627e143d3fe4c",
+       "tx_827a8670465ad350",
+       "tx_a554d7eeb03d9382",
+       "tx_c8abb1e67e948864",
+       "tx_8139504f225c36fe",
+       "tx_b4e4eb2e80ae76ea"
+      ],
+      "sufficiency_score": 0.75,
+      "remaining_score": 0.0,
+      "comprehensive": true,
+      "redundant": false,
+      "attribution": {
+       "tx_5cf6428f880796be": 0.076923,
+       "tx_45d62693e8017c77": 0.076923,
+       "tx_60ea791d0a3286af": 0.076923,
+       "tx_92c2137c2feae70d": 0.076923,
+       "tx_6723a9fcf3785094": 0.326923,
+       "tx_5ee7c4b83ab8ee7d": 0.326923,
+       "tx_41ef992842b1acf1": 0.576923,
+       "tx_808627e143d3fe4c": 0.326923,
+       "tx_827a8670465ad350": 0.326923,
+       "tx_a554d7eeb03d9382": 0.076923,
+       "tx_c8abb1e67e948864": 0.076923,
+       "tx_8139504f225c36fe": 0.076923,
+       "tx_b4e4eb2e80ae76ea": 0.076923
+      }
+     },
+     "counterfactuals": {
+      "counterfactuals": [
+       {
+        "removed": [
+         "tx_41ef992842b1acf1"
+        ],
+        "score_after": 0.5,
+        "typology_after": "peeling_chain"
+       }
+      ],
+      "note": null
+     },
+     "reasons": {
+      "peeling_chain": "6 forwarding hops that skim"
+     },
+     "edges": [
+      {
+       "id": "tx_5cf6428f880796be",
+       "kind": "transfer",
+       "src": "acct_a4ee8c4948887c0b",
+       "dst": "acct_67e8a1346d2b1c9a",
+       "amount": 62026.85,
+       "ts": "2026-01-10T17:00:02.185925+00:00"
+      },
+      {
+       "id": "tx_45d62693e8017c77",
+       "kind": "transfer",
+       "src": "acct_67e8a1346d2b1c9a",
+       "dst": "acct_1f8ca42672bc50a1",
+       "amount": 4156.74,
+       "ts": "2026-01-11T11:29:46.208158+00:00"
+      },
+      {
+       "id": "tx_60ea791d0a3286af",
+       "kind": "transfer",
+       "src": "acct_67e8a1346d2b1c9a",
+       "dst": "acct_ee07a4667db7a2f8",
+       "amount": 57870.11,
+       "ts": "2026-01-11T12:17:44.471285+00:00"
+      },
+      {
+       "id": "tx_92c2137c2feae70d",
+       "kind": "transfer",
+       "src": "acct_ee07a4667db7a2f8",
+       "dst": "acct_9900cdab26f4c115",
+       "amount": 3240.15,
+       "ts": "2026-01-11T14:36:45.042741+00:00"
+      },
+      {
+       "id": "tx_6723a9fcf3785094",
+       "kind": "transfer",
+       "src": "acct_ee07a4667db7a2f8",
+       "dst": "acct_211c99c5c8aa831f",
+       "amount": 54629.96,
+       "ts": "2026-01-11T16:15:07.838023+00:00"
+      },
+      {
+       "id": "tx_5ee7c4b83ab8ee7d",
+       "kind": "transfer",
+       "src": "acct_211c99c5c8aa831f",
+       "dst": "acct_df0589a958ab35ca",
+       "amount": 4245.02,
+       "ts": "2026-01-12T05:58:26.027954+00:00"
+      },
+      {
+       "id": "tx_41ef992842b1acf1",
+       "kind": "transfer",
+       "src": "acct_211c99c5c8aa831f",
+       "dst": "acct_85c238548d97e9b1",
+       "amount": 50384.95,
+       "ts": "2026-01-12T07:43:01.779164+00:00"
+      },
+      {
+       "id": "tx_808627e143d3fe4c",
+       "kind": "transfer",
+       "src": "acct_85c238548d97e9b1",
+       "dst": "acct_b861ea40e039d4a4",
+       "amount": 2557.26,
+       "ts": "2026-01-12T22:55:02.364673+00:00"
+      },
+      {
+       "id": "tx_827a8670465ad350",
+       "kind": "transfer",
+       "src": "acct_85c238548d97e9b1",
+       "dst": "acct_50291f4d05665dc2",
+       "amount": 47827.69,
+       "ts": "2026-01-13T00:31:13.349285+00:00"
+      },
+      {
+       "id": "tx_a554d7eeb03d9382",
+       "kind": "transfer",
+       "src": "acct_50291f4d05665dc2",
+       "dst": "acct_4198c4dbb569ce91",
+       "amount": 3326.43,
+       "ts": "2026-01-13T09:31:10.532316+00:00"
+      },
+      {
+       "id": "tx_c8abb1e67e948864",
+       "kind": "transfer",
+       "src": "acct_50291f4d05665dc2",
+       "dst": "acct_19c99f02dea0924c",
+       "amount": 44501.26,
+       "ts": "2026-01-13T10:24:38.683247+00:00"
+      },
+      {
+       "id": "tx_8139504f225c36fe",
+       "kind": "transfer",
+       "src": "acct_19c99f02dea0924c",
+       "dst": "acct_b22c5cd8a17d6b09",
+       "amount": 2319.24,
+       "ts": "2026-01-14T00:45:03.645197+00:00"
+      },
+      {
+       "id": "tx_b4e4eb2e80ae76ea",
+       "kind": "transfer",
+       "src": "acct_19c99f02dea0924c",
+       "dst": "acct_eb0aa0a5fb445d27",
+       "amount": 42182.02,
+       "ts": "2026-01-14T00:56:01.631411+00:00"
+      }
+     ]
+    },
+    "narrative": {
+     "text": "Lattice flags this case as peeling_chain with a risk score of 1.00 against a threshold of 0.60. The decision rests on 7 pieces of evidence, which on their own score 0.75: tx_6723a9fcf3785094 (acct_ee07a4667db7a2f8 to acct_211c99c5c8aa831f, 54,629.96); tx_5ee7c4b83ab8ee7d (acct_211c99c5c8aa831f to acct_df0589a958ab35ca, 4,245.02); tx_41ef992842b1acf1 (acct_211c99c5c8aa831f to acct_85c238548d97e9b1, 50,384.95); tx_808627e143d3fe4c (acct_85c238548d97e9b1 to acct_b861ea40e039d4a4, 2,557.26); tx_827a8670465ad350 (acct_85c238548d97e9b1 to acct_50291f4d05665dc2, 47,827.69); tx_a554d7eeb03d9382 (acct_50291f4d05665dc2 to acct_4198c4dbb569ce91, 3,326.43); tx_c8abb1e67e948864 (acct_50291f4d05665dc2 to acct_19c99f02dea0924c, 44,501.26). Without tx_41ef992842b1acf1 the score would fall to 0.50, below the threshold.",
+     "source": "template"
+    }
+   },
+   "ts": "2026-10-16T17:16:19.132118Z"
+  },
+  {
+   "id": "1792170979399-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "action_proposed",
+   "data": {
+    "action_id": "act_0c64a3a5fcc94794",
+    "kind": "freeze",
+    "tier": 3,
+    "target_id": "acct_67e8a1346d2b1c9a",
+    "blast_radius": {
+     "hops": 2,
+     "account_count": 8,
+     "customer_count": 8,
+     "sample_accounts": [
+      "acct_0b844957e09317f5",
+      "acct_1f8ca42672bc50a1",
+      "acct_211c99c5c8aa831f",
+      "acct_67e8a1346d2b1c9a",
+      "acct_9900cdab26f4c115",
+      "acct_a4ee8c4948887c0b",
+      "acct_c3a9938dd28bc5f2",
+      "acct_ee07a4667db7a2f8"
+     ]
+    }
+   },
+   "ts": "2026-10-16T17:16:19.184157Z"
+  },
+  {
+   "id": "1792171188741-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "action_approved",
+   "data": {
+    "action_id": "act_0c64a3a5fcc94794",
+    "by": "UI check"
+   },
+   "ts": "2026-10-16T17:19:48.039278Z"
+  },
+  {
+   "id": "1792171188914-0",
+   "case_id": "case_aa7780b9e6504f40",
+   "type": "action_executed",
+   "data": {
+    "action_id": "act_0c64a3a5fcc94794",
+    "outcome": "account acct_67e8a1346d2b1c9a frozen (simulated)"
+   },
+   "ts": "2026-10-16T17:19:48.221596Z"
+  }
+ ],
+ "snapshot": {
+  "case": {
+   "circuit": {
+    "circuit": {
+     "status": "circuit",
+     "threshold": 0.6,
+     "full_score": 1.0,
+     "typology": "peeling_chain",
+     "detectors": {
+      "peeling_chain": 1.0
+     },
+     "circuit_edges": [
+      "tx_6723a9fcf3785094",
+      "tx_5ee7c4b83ab8ee7d",
+      "tx_41ef992842b1acf1",
+      "tx_808627e143d3fe4c",
+      "tx_827a8670465ad350",
+      "tx_a554d7eeb03d9382",
+      "tx_c8abb1e67e948864"
+     ],
+     "supporting_edges": [
+      "tx_5cf6428f880796be",
+      "tx_45d62693e8017c77",
+      "tx_60ea791d0a3286af",
+      "tx_92c2137c2feae70d",
+      "tx_6723a9fcf3785094",
+      "tx_5ee7c4b83ab8ee7d",
+      "tx_41ef992842b1acf1",
+      "tx_808627e143d3fe4c",
+      "tx_827a8670465ad350",
+      "tx_a554d7eeb03d9382",
+      "tx_c8abb1e67e948864",
+      "tx_8139504f225c36fe",
+      "tx_b4e4eb2e80ae76ea"
+     ],
+     "sufficiency_score": 0.75,
+     "remaining_score": 0.0,
+     "comprehensive": true,
+     "redundant": false,
+     "attribution": {
+      "tx_5cf6428f880796be": 0.076923,
+      "tx_45d62693e8017c77": 0.076923,
+      "tx_60ea791d0a3286af": 0.076923,
+      "tx_92c2137c2feae70d": 0.076923,
+      "tx_6723a9fcf3785094": 0.326923,
+      "tx_5ee7c4b83ab8ee7d": 0.326923,
+      "tx_41ef992842b1acf1": 0.576923,
+      "tx_808627e143d3fe4c": 0.326923,
+      "tx_827a8670465ad350": 0.326923,
+      "tx_a554d7eeb03d9382": 0.076923,
+      "tx_c8abb1e67e948864": 0.076923,
+      "tx_8139504f225c36fe": 0.076923,
+      "tx_b4e4eb2e80ae76ea": 0.076923
+     }
+    },
+    "counterfactuals": {
+     "counterfactuals": [
+      {
+       "removed": [
+        "tx_41ef992842b1acf1"
+       ],
+       "score_after": 0.5,
+       "typology_after": "peeling_chain"
+      }
+     ],
+     "note": null
+    },
+    "reasons": {
+     "peeling_chain": "6 forwarding hops that skim"
+    },
+    "edges": [
+     {
+      "id": "tx_5cf6428f880796be",
+      "kind": "transfer",
+      "src": "acct_a4ee8c4948887c0b",
+      "dst": "acct_67e8a1346d2b1c9a",
+      "amount": 62026.85,
+      "ts": "2026-01-10T17:00:02.185925+00:00"
+     },
+     {
+      "id": "tx_45d62693e8017c77",
+      "kind": "transfer",
+      "src": "acct_67e8a1346d2b1c9a",
+      "dst": "acct_1f8ca42672bc50a1",
+      "amount": 4156.74,
+      "ts": "2026-01-11T11:29:46.208158+00:00"
+     },
+     {
+      "id": "tx_60ea791d0a3286af",
+      "kind": "transfer",
+      "src": "acct_67e8a1346d2b1c9a",
+      "dst": "acct_ee07a4667db7a2f8",
+      "amount": 57870.11,
+      "ts": "2026-01-11T12:17:44.471285+00:00"
+     },
+     {
+      "id": "tx_92c2137c2feae70d",
+      "kind": "transfer",
+      "src": "acct_ee07a4667db7a2f8",
+      "dst": "acct_9900cdab26f4c115",
+      "amount": 3240.15,
+      "ts": "2026-01-11T14:36:45.042741+00:00"
+     },
+     {
+      "id": "tx_6723a9fcf3785094",
+      "kind": "transfer",
+      "src": "acct_ee07a4667db7a2f8",
+      "dst": "acct_211c99c5c8aa831f",
+      "amount": 54629.96,
+      "ts": "2026-01-11T16:15:07.838023+00:00"
+     },
+     {
+      "id": "tx_5ee7c4b83ab8ee7d",
+      "kind": "transfer",
+      "src": "acct_211c99c5c8aa831f",
+      "dst": "acct_df0589a958ab35ca",
+      "amount": 4245.02,
+      "ts": "2026-01-12T05:58:26.027954+00:00"
+     },
+     {
+      "id": "tx_41ef992842b1acf1",
+      "kind": "transfer",
+      "src": "acct_211c99c5c8aa831f",
+      "dst": "acct_85c238548d97e9b1",
+      "amount": 50384.95,
+      "ts": "2026-01-12T07:43:01.779164+00:00"
+     },
+     {
+      "id": "tx_808627e143d3fe4c",
+      "kind": "transfer",
+      "src": "acct_85c238548d97e9b1",
+      "dst": "acct_b861ea40e039d4a4",
+      "amount": 2557.26,
+      "ts": "2026-01-12T22:55:02.364673+00:00"
+     },
+     {
+      "id": "tx_827a8670465ad350",
+      "kind": "transfer",
+      "src": "acct_85c238548d97e9b1",
+      "dst": "acct_50291f4d05665dc2",
+      "amount": 47827.69,
+      "ts": "2026-01-13T00:31:13.349285+00:00"
+     },
+     {
+      "id": "tx_a554d7eeb03d9382",
+      "kind": "transfer",
+      "src": "acct_50291f4d05665dc2",
+      "dst": "acct_4198c4dbb569ce91",
+      "amount": 3326.43,
+      "ts": "2026-01-13T09:31:10.532316+00:00"
+     },
+     {
+      "id": "tx_c8abb1e67e948864",
+      "kind": "transfer",
+      "src": "acct_50291f4d05665dc2",
+      "dst": "acct_19c99f02dea0924c",
+      "amount": 44501.26,
+      "ts": "2026-01-13T10:24:38.683247+00:00"
+     },
+     {
+      "id": "tx_8139504f225c36fe",
+      "kind": "transfer",
+      "src": "acct_19c99f02dea0924c",
+      "dst": "acct_b22c5cd8a17d6b09",
+      "amount": 2319.24,
+      "ts": "2026-01-14T00:45:03.645197+00:00"
+     },
+     {
+      "id": "tx_b4e4eb2e80ae76ea",
+      "kind": "transfer",
+      "src": "acct_19c99f02dea0924c",
+      "dst": "acct_eb0aa0a5fb445d27",
+      "amount": 42182.02,
+      "ts": "2026-01-14T00:56:01.631411+00:00"
+     }
+    ]
+   },
+   "narrative": {
+    "text": "Lattice flags this case as peeling_chain with a risk score of 1.00 against a threshold of 0.60. The decision rests on 7 pieces of evidence, which on their own score 0.75: tx_6723a9fcf3785094 (acct_ee07a4667db7a2f8 to acct_211c99c5c8aa831f, 54,629.96); tx_5ee7c4b83ab8ee7d (acct_211c99c5c8aa831f to acct_df0589a958ab35ca, 4,245.02); tx_41ef992842b1acf1 (acct_211c99c5c8aa831f to acct_85c238548d97e9b1, 50,384.95); tx_808627e143d3fe4c (acct_85c238548d97e9b1 to acct_b861ea40e039d4a4, 2,557.26); tx_827a8670465ad350 (acct_85c238548d97e9b1 to acct_50291f4d05665dc2, 47,827.69); tx_a554d7eeb03d9382 (acct_50291f4d05665dc2 to acct_4198c4dbb569ce91, 3,326.43); tx_c8abb1e67e948864 (acct_50291f4d05665dc2 to acct_19c99f02dea0924c, 44,501.26). Without tx_41ef992842b1acf1 the score would fall to 0.50, below the threshold.",
+    "source": "template"
+   },
+   "findings": [
+    {
+     "hypothesis": "peeling_chain",
+     "verdict": "supports",
+     "confidence": 0.7,
+     "summary": "Scripted check: chain matched from the seed account.",
+     "claims": [
+      {
+       "statement": "graph_match_pattern chain matched from acct_67e8a1346d2b1c9a",
+       "rel_ids": [
+        "tx_60ea791d0a3286af",
+        "tx_6723a9fcf3785094",
+        "tx_41ef992842b1acf1",
+        "tx_827a8670465ad350",
+        "tx_c8abb1e67e948864",
+        "tx_b4e4eb2e80ae76ea",
+        "tx_45d62693e8017c77",
+        "tx_5cf6428f880796be",
+        "tx_5ee7c4b83ab8ee7d",
+        "tx_808627e143d3fe4c",
+        "tx_8139504f225c36fe",
+        "tx_92c2137c2feae70d",
+        "tx_a554d7eeb03d9382"
+       ],
+       "node_ids": [],
+       "result_ids": [
+        "led_43a4af5c07b44ba0"
+       ]
+      },
+      {
+       "statement": "seed account record",
+       "rel_ids": [],
+       "node_ids": [
+        "acct_67e8a1346d2b1c9a"
+       ],
+       "result_ids": [
+        "led_6527716411dc43a4"
+       ]
+      }
+     ],
+     "status": "complete",
+     "status_reason": null
+    },
+    {
+     "hypothesis": "fan_in_structuring",
+     "verdict": "refutes",
+     "confidence": 0.6,
+     "summary": "Scripted check: the pattern did not match from the seed account.",
+     "claims": [
+      {
+       "statement": "seed account record",
+       "rel_ids": [],
+       "node_ids": [
+        "acct_67e8a1346d2b1c9a"
+       ],
+       "result_ids": [
+        "led_fb681b920a0f499f"
+       ]
+      }
+     ],
+     "status": "complete",
+     "status_reason": null
+    },
+    {
+     "hypothesis": "fan_out",
+     "verdict": "refutes",
+     "confidence": 0.6,
+     "summary": "Scripted check: the pattern did not match from the seed account.",
+     "claims": [
+      {
+       "statement": "seed account record",
+       "rel_ids": [],
+       "node_ids": [
+        "acct_67e8a1346d2b1c9a"
+       ],
+       "result_ids": [
+        "led_b413cb4e864e4bb7"
+       ]
+      }
+     ],
+     "status": "complete",
+     "status_reason": null
+    },
+    {
+     "hypothesis": "round_trip",
+     "verdict": "refutes",
+     "confidence": 0.6,
+     "summary": "Scripted check: the pattern did not match from the seed account.",
+     "claims": [
+      {
+       "statement": "seed account record",
+       "rel_ids": [],
+       "node_ids": [
+        "acct_67e8a1346d2b1c9a"
+       ],
+       "result_ids": [
+        "led_44a88cee9b164d9d"
+       ]
+      }
+     ],
+     "status": "complete",
+     "status_reason": null
+    }
+   ],
+   "created_at": "2026-10-16T17:15:59.593000+00:00",
+   "mode": "orchestrated",
+   "updated_at": "2026-10-16T17:19:48.871000+00:00",
+   "verdict": {
+    "case_id": "case_aa7780b9e6504f40",
+    "suspicious": true,
+    "typology": "peeling_chain",
+    "investigator_typology": "peeling_chain",
+    "risk": "high",
+    "score": 1.0,
+    "confidence": 0.7,
+    "claims": [
+     {
+      "statement": "graph_match_pattern chain matched from acct_67e8a1346d2b1c9a",
+      "rel_ids": [
+       "tx_60ea791d0a3286af",
+       "tx_6723a9fcf3785094",
+       "tx_41ef992842b1acf1",
+       "tx_827a8670465ad350",
+       "tx_c8abb1e67e948864",
+       "tx_b4e4eb2e80ae76ea",
+       "tx_45d62693e8017c77",
+       "tx_5cf6428f880796be",
+       "tx_5ee7c4b83ab8ee7d",
+       "tx_808627e143d3fe4c",
+       "tx_8139504f225c36fe",
+       "tx_92c2137c2feae70d",
+       "tx_a554d7eeb03d9382"
+      ],
+      "node_ids": [],
+      "result_ids": [
+       "led_43a4af5c07b44ba0"
+      ]
+     },
+     {
+      "statement": "seed account record",
+      "rel_ids": [],
+      "node_ids": [
+       "acct_67e8a1346d2b1c9a"
+      ],
+      "result_ids": [
+       "led_6527716411dc43a4"
+      ]
+     },
+     {
+      "statement": "seed account record",
+      "rel_ids": [],
+      "node_ids": [
+       "acct_67e8a1346d2b1c9a"
+      ],
+      "result_ids": [
+       "led_fb681b920a0f499f"
+      ]
+     },
+     {
+      "statement": "seed account record",
+      "rel_ids": [],
+      "node_ids": [
+       "acct_67e8a1346d2b1c9a"
+      ],
+      "result_ids": [
+       "led_b413cb4e864e4bb7"
+      ]
+     },
+     {
+      "statement": "seed account record",
+      "rel_ids": [],
+      "node_ids": [
+       "acct_67e8a1346d2b1c9a"
+      ],
+      "result_ids": [
+       "led_44a88cee9b164d9d"
+      ]
+     }
+    ],
+    "rejected_citations": [],
+    "unverified_ids": [],
+    "needs_review": false,
+    "review_reason": null,
+    "notes": []
+   },
+   "alert_id": "alert_03d1e6b117697078",
+   "seed_account_id": "acct_67e8a1346d2b1c9a",
+   "id": "case_aa7780b9e6504f40",
+   "alert_reason": "large inbound followed by rapid outbound transfers",
+   "status_reason": "account acct_67e8a1346d2b1c9a frozen (simulated)",
+   "status": "actioned"
+  },
+  "actions": [
+   {
+    "kind": "freeze",
+    "created_at": "2026-10-16T17:16:19.362000+00:00",
+    "target_id": "acct_67e8a1346d2b1c9a",
+    "blast_radius": {
+     "hops": 2,
+     "account_count": 8,
+     "customer_count": 8,
+     "sample_accounts": [
+      "acct_0b844957e09317f5",
+      "acct_1f8ca42672bc50a1",
+      "acct_211c99c5c8aa831f",
+      "acct_67e8a1346d2b1c9a",
+      "acct_9900cdab26f4c115",
+      "acct_a4ee8c4948887c0b",
+      "acct_c3a9938dd28bc5f2",
+      "acct_ee07a4667db7a2f8"
+     ]
+    },
+    "rationale": "peeling_chain pattern, risk high (score 1.00), backed by 5 verified claims",
+    "approved_by": "UI check",
+    "updated_at": "2026-10-16T17:19:48.836000+00:00",
+    "tier": 3,
+    "approved_at": "2026-10-16T17:19:47.905022+00:00",
+    "case_id": "case_aa7780b9e6504f40",
+    "id": "act_0c64a3a5fcc94794",
+    "outcome": "account acct_67e8a1346d2b1c9a frozen (simulated)",
+    "status": "executed"
+   }
+  ],
+  "evidence": {
+   "nodes": [
+    {
+     "id": "acct_19c99f02dea0924c",
+     "kind": "account",
+     "account_kind": "person",
+     "customer_id": "cust_bbea29c2b0e888e9"
+    },
+    {
+     "id": "acct_1f8ca42672bc50a1",
+     "kind": "account",
+     "account_kind": "person",
+     "customer_id": "cust_da44c399028c7b2c"
+    },
+    {
+     "id": "acct_211c99c5c8aa831f",
+     "kind": "account",
+     "account_kind": "person",
+     "customer_id": "cust_938c96b258eeef4c"
+    },
+    {
+     "id": "acct_4198c4dbb569ce91",
+     "kind": "account",
+     "account_kind": "person",
+     "customer_id": "cust_9d5cf216e34a12cd"
+    },
+    {
+     "id": "acct_50291f4d05665dc2",
+     "kind": "account",
+     "account_kind": "person",
+     "customer_id": "cust_edbabd83fb859dee"
+    },
+    {
+     "id": "acct_67e8a1346d2b1c9a",
+     "kind": "account",
+     "account_kind": "person",
+     "customer_id": "cust_5716cc3f93f2f174"
+    },
+    {
+     "id": "acct_85c238548d97e9b1",
+     "kind": "account",
+     "account_kind": "person",
+     "customer_id": "cust_4d8ba7807d531e6d"
+    },
+    {
+     "id": "acct_9900cdab26f4c115",
+     "kind": "account",
+     "account_kind": "person",
+     "customer_id": "cust_bcf095de4578c23f"
+    },
+    {
+     "id": "acct_a4ee8c4948887c0b",
+     "kind": "account",
+     "account_kind": "exchange",
+     "customer_id": "cust_30d18884b1fbe93e"
+    },
+    {
+     "id": "acct_b22c5cd8a17d6b09",
+     "kind": "account",
+     "account_kind": "person",
+     "customer_id": "cust_c8ab6fd54c0c1261"
+    },
+    {
+     "id": "acct_b861ea40e039d4a4",
+     "kind": "account",
+     "account_kind": "person",
+     "customer_id": "cust_4d96b4033bc1c269"
+    },
+    {
+     "id": "acct_df0589a958ab35ca",
+     "kind": "account",
+     "account_kind": "person",
+     "customer_id": "cust_285d79f260a0ac17"
+    },
+    {
+     "id": "acct_eb0aa0a5fb445d27",
+     "kind": "account",
+     "account_kind": "person",
+     "customer_id": "cust_54173dd4e76d1871"
+    },
+    {
+     "id": "acct_ee07a4667db7a2f8",
+     "kind": "account",
+     "account_kind": "person",
+     "customer_id": "cust_2de2453630a34858"
+    }
+   ],
+   "edges": [
+    {
+     "id": "tx_5cf6428f880796be",
+     "kind": "transfer",
+     "src": "acct_a4ee8c4948887c0b",
+     "dst": "acct_67e8a1346d2b1c9a",
+     "amount": 62026.85,
+     "ts": "2026-01-10T17:00:02.185925+00:00",
+     "channel": "crypto",
+     "sources": [
+      "led_aace738e327e4e06",
+      "led_43a4af5c07b44ba0"
+     ]
+    },
+    {
+     "id": "tx_60ea791d0a3286af",
+     "kind": "transfer",
+     "src": "acct_67e8a1346d2b1c9a",
+     "dst": "acct_ee07a4667db7a2f8",
+     "amount": 57870.11,
+     "ts": "2026-01-11T12:17:44.471285+00:00",
+     "channel": "wire",
+     "sources": [
+      "led_aace738e327e4e06",
+      "led_43a4af5c07b44ba0"
+     ]
+    },
+    {
+     "id": "tx_45d62693e8017c77",
+     "kind": "transfer",
+     "src": "acct_67e8a1346d2b1c9a",
+     "dst": "acct_1f8ca42672bc50a1",
+     "amount": 4156.74,
+     "ts": "2026-01-11T11:29:46.208158+00:00",
+     "channel": "p2p",
+     "sources": [
+      "led_aace738e327e4e06",
+      "led_43a4af5c07b44ba0"
+     ]
+    },
+    {
+     "id": "tx_6723a9fcf3785094",
+     "kind": "transfer",
+     "src": "acct_ee07a4667db7a2f8",
+     "dst": "acct_211c99c5c8aa831f",
+     "amount": 54629.96,
+     "ts": "2026-01-11T16:15:07.838023+00:00",
+     "channel": "wire",
+     "sources": [
+      "led_43a4af5c07b44ba0"
+     ]
+    },
+    {
+     "id": "tx_41ef992842b1acf1",
+     "kind": "transfer",
+     "src": "acct_211c99c5c8aa831f",
+     "dst": "acct_85c238548d97e9b1",
+     "amount": 50384.95,
+     "ts": "2026-01-12T07:43:01.779164+00:00",
+     "channel": "wire",
+     "sources": [
+      "led_43a4af5c07b44ba0"
+     ]
+    },
+    {
+     "id": "tx_827a8670465ad350",
+     "kind": "transfer",
+     "src": "acct_85c238548d97e9b1",
+     "dst": "acct_50291f4d05665dc2",
+     "amount": 47827.69,
+     "ts": "2026-01-13T00:31:13.349285+00:00",
+     "channel": "wire",
+     "sources": [
+      "led_43a4af5c07b44ba0"
+     ]
+    },
+    {
+     "id": "tx_c8abb1e67e948864",
+     "kind": "transfer",
+     "src": "acct_50291f4d05665dc2",
+     "dst": "acct_19c99f02dea0924c",
+     "amount": 44501.26,
+     "ts": "2026-01-13T10:24:38.683247+00:00",
+     "channel": "wire",
+     "sources": [
+      "led_43a4af5c07b44ba0"
+     ]
+    },
+    {
+     "id": "tx_b4e4eb2e80ae76ea",
+     "kind": "transfer",
+     "src": "acct_19c99f02dea0924c",
+     "dst": "acct_eb0aa0a5fb445d27",
+     "amount": 42182.02,
+     "ts": "2026-01-14T00:56:01.631411+00:00",
+     "channel": "wire",
+     "sources": [
+      "led_43a4af5c07b44ba0"
+     ]
+    },
+    {
+     "id": "tx_5ee7c4b83ab8ee7d",
+     "kind": "transfer",
+     "src": "acct_211c99c5c8aa831f",
+     "dst": "acct_df0589a958ab35ca",
+     "amount": 4245.02,
+     "ts": "2026-01-12T05:58:26.027954+00:00",
+     "channel": "p2p",
+     "sources": [
+      "led_43a4af5c07b44ba0"
+     ]
+    },
+    {
+     "id": "tx_808627e143d3fe4c",
+     "kind": "transfer",
+     "src": "acct_85c238548d97e9b1",
+     "dst": "acct_b861ea40e039d4a4",
+     "amount": 2557.26,
+     "ts": "2026-01-12T22:55:02.364673+00:00",
+     "channel": "p2p",
+     "sources": [
+      "led_43a4af5c07b44ba0"
+     ]
+    },
+    {
+     "id": "tx_8139504f225c36fe",
+     "kind": "transfer",
+     "src": "acct_19c99f02dea0924c",
+     "dst": "acct_b22c5cd8a17d6b09",
+     "amount": 2319.24,
+     "ts": "2026-01-14T00:45:03.645197+00:00",
+     "channel": "p2p",
+     "sources": [
+      "led_43a4af5c07b44ba0"
+     ]
+    },
+    {
+     "id": "tx_92c2137c2feae70d",
+     "kind": "transfer",
+     "src": "acct_ee07a4667db7a2f8",
+     "dst": "acct_9900cdab26f4c115",
+     "amount": 3240.15,
+     "ts": "2026-01-11T14:36:45.042741+00:00",
+     "channel": "p2p",
+     "sources": [
+      "led_43a4af5c07b44ba0"
+     ]
+    },
+    {
+     "id": "tx_a554d7eeb03d9382",
+     "kind": "transfer",
+     "src": "acct_50291f4d05665dc2",
+     "dst": "acct_4198c4dbb569ce91",
+     "amount": 3326.43,
+     "ts": "2026-01-13T09:31:10.532316+00:00",
+     "channel": "p2p",
+     "sources": [
+      "led_43a4af5c07b44ba0"
+     ]
+    }
+   ],
+   "ledger": {
+    "led_aace738e327e4e06": {
+     "result_id": "led_aace738e327e4e06",
+     "tool": "graph_neighbors",
+     "params": {
+      "direction": "both",
+      "hops": 1,
+      "node_id": "acct_67e8a1346d2b1c9a",
+      "purpose": "orchestrator summary"
+     },
+     "ts": "2026-10-16T17:15:59.923000+00:00"
+    },
+    "led_6527716411dc43a4": {
+     "result_id": "led_6527716411dc43a4",
+     "tool": "graph_get_node",
+     "params": {
+      "node_id": "acct_67e8a1346d2b1c9a"
+     },
+     "ts": "2026-10-16T17:16:01.920000+00:00"
+    },
+    "led_fb681b920a0f499f": {
+     "result_id": "led_fb681b920a0f499f",
+     "tool": "graph_get_node",
+     "params": {
+      "node_id": "acct_67e8a1346d2b1c9a"
+     },
+     "ts": "2026-10-16T17:16:01.926000+00:00"
+    },
+    "led_ef531f5ea3734332": {
+     "result_id": "led_ef531f5ea3734332",
+     "tool": "graph_match_pattern",
+     "params": {
+      "max_amount": 9999.99,
+      "max_gap_hours": 48,
+      "max_length": 6,
+      "min_amount": 8000.0,
+      "min_count": 5,
+      "min_forward_ratio": 0.8,
+      "node_id": "acct_67e8a1346d2b1c9a",
+      "pattern": "fan_in",
+      "window_days": 7
+     },
+     "ts": "2026-10-16T17:16:02.613000+00:00"
+    },
+    "led_43a4af5c07b44ba0": {
+     "result_id": "led_43a4af5c07b44ba0",
+     "tool": "graph_match_pattern",
+     "params": {
+      "max_amount": null,
+      "max_gap_hours": 48,
+      "max_length": 6,
+      "min_amount": null,
+      "min_count": 5,
+      "min_forward_ratio": 0.8,
+      "node_id": "acct_67e8a1346d2b1c9a",
+      "pattern": "chain",
+      "window_days": 7
+     },
+     "ts": "2026-10-16T17:16:02.707000+00:00"
+    },
+    "led_b413cb4e864e4bb7": {
+     "result_id": "led_b413cb4e864e4bb7",
+     "tool": "graph_get_node",
+     "params": {
+      "node_id": "acct_67e8a1346d2b1c9a"
+     },
+     "ts": "2026-10-16T17:16:03.057000+00:00"
+    },
+    "led_773b982950cb4a13": {
+     "result_id": "led_773b982950cb4a13",
+     "tool": "graph_match_pattern",
+     "params": {
+      "max_amount": null,
+      "max_gap_hours": 48,
+      "max_length": 6,
+      "min_amount": null,
+      "min_count": 8,
+      "min_forward_ratio": 0.8,
+      "node_id": "acct_67e8a1346d2b1c9a",
+      "pattern": "fan_out",
+      "window_days": 7
+     },
+     "ts": "2026-10-16T17:16:03.144000+00:00"
+    },
+    "led_44a88cee9b164d9d": {
+     "result_id": "led_44a88cee9b164d9d",
+     "tool": "graph_get_node",
+     "params": {
+      "node_id": "acct_67e8a1346d2b1c9a"
+     },
+     "ts": "2026-10-16T17:16:03.178000+00:00"
+    },
+    "led_f45950add09c476c": {
+     "result_id": "led_f45950add09c476c",
+     "tool": "graph_match_pattern",
+     "params": {
+      "max_amount": null,
+      "max_gap_hours": 48,
+      "max_length": 6,
+      "min_amount": null,
+      "min_count": 5,
+      "min_forward_ratio": 0.8,
+      "node_id": "acct_67e8a1346d2b1c9a",
+      "pattern": "cycle",
+      "window_days": 7
+     },
+     "ts": "2026-10-16T17:16:07.896000+00:00"
+    }
+   },
+   "truncated": false
+  }
+ }
+}

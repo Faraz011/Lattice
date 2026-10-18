@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+import pytest
+
+from lattice.agents.narrator import ID_PATTERN
 from lattice.graph.subgraph import EvidenceGraph
 from lattice.ingest.elliptic2 import (
     account_id,
@@ -48,6 +51,22 @@ def test_repeated_flows_become_one_transfer():
     assert len(ids) == len(set(ids))
     cc3 = next(c for c in SLICE.manifest.cases if c.case_id == "elliptic2-cc3")
     assert cc3.transfer_ids == [transfer_id("6", "7"), transfer_id("6", "8")]
+
+
+def test_a_tagged_slice_shares_no_id_with_the_untagged_one():
+    tagged = build_slice(SAMPLE, subgraphs=10, neighbors=3, seed=2, tag="test")
+
+    def ids(batch):
+        return set(batch.node_ids()) | {t.id for t in batch.transfers}
+
+    assert not ids(tagged.batch) & ids(SLICE.batch)
+    assert len(ids(tagged.batch)) == len(ids(SLICE.batch))
+    assert account_id("1", "test") == "acct_elltest1"
+    # The narrator and the UI must see each tagged ID whole, not cut short.
+    for node_id in ids(tagged.batch):
+        assert ID_PATTERN.fullmatch(node_id), node_id
+    seeds = {c.seed_account_id for c in tagged.manifest.cases}
+    assert seeds <= {a.id for a in tagged.batch.accounts}
 
 
 def test_labelled_subgraph_members_appear_in_the_manifest():
@@ -111,3 +130,20 @@ def test_the_harness_can_run_a_slice_against_its_labels():
     assert set(cc1.expected_edges) == {transfer_id("1", "2"), transfer_id("2", "3"),
                                        transfer_id("3", "1")}
     assert alerts[alert_id("cc2")].role == "decoy"
+
+
+def test_a_tag_that_could_break_ids_is_refused():
+    for bad in ("test_", "1abc", "a-b"):
+        with pytest.raises(ValueError, match="letter followed by letters or digits"):
+            build_slice(SAMPLE, subgraphs=10, neighbors=3, seed=2, tag=bad)
+
+
+def test_a_slice_without_neighbours_never_reads_the_background_graph(tmp_path):
+    for name in ("connected_components.csv", "nodes.csv", "edges.csv"):
+        (tmp_path / name).write_text((SAMPLE / name).read_text())
+    # No background_edges.csv at all: reading it would fail.
+
+    bare = build_slice(tmp_path, subgraphs=10, neighbors=0, seed=2)
+
+    assert {t.id for t in bare.batch.transfers} == {
+        t for case in bare.manifest.cases for t in case.transfer_ids}
