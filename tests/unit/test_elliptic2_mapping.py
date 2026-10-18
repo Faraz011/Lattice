@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+import pytest
+
+from lattice.agents.narrator import ID_PATTERN
 from lattice.graph.subgraph import EvidenceGraph
 from lattice.ingest.elliptic2 import (
     account_id,
@@ -51,14 +54,17 @@ def test_repeated_flows_become_one_transfer():
 
 
 def test_a_tagged_slice_shares_no_id_with_the_untagged_one():
-    tagged = build_slice(SAMPLE, subgraphs=10, neighbors=3, seed=2, tag="test_")
+    tagged = build_slice(SAMPLE, subgraphs=10, neighbors=3, seed=2, tag="test")
 
     def ids(batch):
         return set(batch.node_ids()) | {t.id for t in batch.transfers}
 
     assert not ids(tagged.batch) & ids(SLICE.batch)
     assert len(ids(tagged.batch)) == len(ids(SLICE.batch))
-    assert account_id("1", "test_") == "acct_elltest_1"
+    assert account_id("1", "test") == "acct_elltest1"
+    # The narrator and the UI must see each tagged ID whole, not cut short.
+    for node_id in ids(tagged.batch):
+        assert ID_PATTERN.fullmatch(node_id), node_id
     seeds = {c.seed_account_id for c in tagged.manifest.cases}
     assert seeds <= {a.id for a in tagged.batch.accounts}
 
@@ -117,3 +123,9 @@ def test_the_harness_can_run_a_slice_against_its_labels():
     assert set(cc1.expected_edges) == {transfer_id("1", "2"), transfer_id("2", "3"),
                                        transfer_id("3", "1")}
     assert alerts[alert_id("cc2")].role == "decoy"
+
+
+def test_a_tag_that_could_break_ids_is_refused():
+    for bad in ("test_", "1abc", "a-b"):
+        with pytest.raises(ValueError, match="letter followed by letters or digits"):
+            build_slice(SAMPLE, subgraphs=10, neighbors=3, seed=2, tag=bad)
