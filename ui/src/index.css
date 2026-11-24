@@ -339,7 +339,7 @@ input:focus-visible { outline-offset: 0; }
 .counterfactuals ul { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
 .counterfactuals li { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; align-items: center; }
 .counterfactuals > p { margin-top: 0.5rem; }
-.toggle.on { background: var(--ink); color: var(--paper-light); }
+.toggle.on, .toggle.on:hover:not(:disabled) { background: var(--ink); color: var(--paper-light); }
 .cf-score { font-size: var(--step--1); color: var(--ink-soft); }
 
 .approval {

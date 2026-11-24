@@ -226,6 +226,20 @@ export function GraphView({ evidence, report, seed, removed, proof, backup, froz
     instance.animate({ center: { eles: target }, duration: 300 })
   }, [focusId, elements])
 
+  // A freeze brings its backup route and the frozen account into view; clearing it shows all.
+  const backupKey = backup?.join(',') ?? ''
+  useEffect(() => {
+    const instance = cy.current
+    if (!instance || instance.nodes().empty()) return
+    let target = instance.collection()
+    for (const id of [...(backup ?? []), ...(frozen ? [frozen] : [])]) {
+      target = target.union(instance.getElementById(id))
+    }
+    target = target.union(target.connectedNodes())
+    instance.animate({ fit: { eles: target.nonempty() ? target : instance.elements(),
+      padding: 50 }, duration: 400 })
+  }, [backupKey, frozen])  // backup by value: a new array with the same edges is no change
+
   const count = evidence?.edges.length ?? 0
   return (
     <div className="graph">
