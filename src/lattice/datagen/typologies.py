@@ -156,6 +156,52 @@ def exit_via_mixer(b: WorldBuilder, rng: random.Random, start: datetime) -> Patt
     return p
 
 
+def parallel_mules(b: WorldBuilder, rng: random.Random, start: datetime) -> Pattern:
+    """One deposit split across two independent chains of fresh mule accounts to one collector.
+
+    Each chain alone is rapid layering strong enough to flag, so freezing any one mule leaves
+    the other route carrying the money: a planted backup route. Route A has four mules and route
+    B three, so the scorer's minimal circuit picks A and B is the backup.
+    """
+    amount = rng.uniform(60_000, 140_000)
+    originator = b.person_account(rng)
+    collector = b.person_account(rng)
+    exit_account = b.person_account(rng)
+    p = Pattern("parallel_mules", seed_account_id=originator.id,
+                account_ids=[originator.id, collector.id, exit_account.id])
+    p.roles = {originator.id: "originator", collector.id: "collector", exit_account.id: "exit"}
+    p.transfer_ids.append(
+        b.transfer(rng.choice(b.exchanges), originator, amount, start, "crypto").id)
+
+    share_a = rng.uniform(0.52, 0.6)
+    arrived = 0.0
+    last = start
+    for share, mules in ((share_a, 4), (1 - share_a - 0.01, 3)):
+        route: list[str] = []
+        t = start + hours(rng.uniform(0.5, 3))
+        sent = amount * share
+        current = originator
+        for _ in range(mules):
+            mule = b.person_account(rng, created_at=t - days(rng.uniform(1, 10)))
+            route.append(b.transfer(current, mule, sent, t).id)
+            p.account_ids.append(mule.id)
+            p.roles[mule.id] = "mule"
+            current, sent = mule, sent * rng.uniform(0.96, 0.995)
+            t += hours(rng.uniform(1, 8))
+        route.append(b.transfer(current, collector, sent, t).id)
+        p.transfer_ids += route
+        p.routes.append(route)
+        arrived += sent
+        last = max(last, t)
+    p.transfer_ids.append(
+        b.transfer(collector, exit_account, arrived * 0.98, last + hours(rng.uniform(2, 12))).id)
+    return p
+
+
+# Showcase patterns are appended after every other case with their own random stream, so adding
+# them never changes an existing world's cases, IDs or tuning (see generator.SHOWCASE).
+SHOWCASE = [parallel_mules]
+
 ALL = [
     peeling_chain,
     fan_in_structuring,

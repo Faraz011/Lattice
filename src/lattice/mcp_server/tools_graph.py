@@ -209,6 +209,11 @@ async def find_paths(
 # --- graph_match_pattern ------------------------------------------------------------------
 
 
+# Chain queries fetch this many times the requested matches before keeping the
+# maximal ones.
+MAXIMAL_FETCH = 8
+
+
 class PatternMatch(BaseModel):
     node_ids: list[str]
     rel_ids: list[str]
@@ -264,9 +269,12 @@ async def match_pattern(
             WITH p LIMIT 2000
             RETURN p ORDER BY length(p) DESC LIMIT $limit
             """,
+            # Fetch extra paths, then keep only maximal ones: two routes out of one account
+            # must not be crowded out by prefixes of the longer route.
             {"id": node_id, "gap": max_gap_hours, "ratio": min_forward_ratio,
-             "limit": _clamp(limit, 1, 20)},
+             "limit": _clamp(limit, 1, 20) * MAXIMAL_FETCH},
             chain_context=True,
+            keep=_clamp(limit, 1, 20),
         )
     return PatternResult(
         pattern=pattern,
@@ -357,9 +365,25 @@ def _densest_window(rows: list[dict[str, Any]], window: timedelta) -> list[dict[
 
 
 async def _paths_as_matches(
-    graph: GraphClient, query: str, params: dict[str, Any], chain_context: bool = False
+    graph: GraphClient, query: str, params: dict[str, Any], chain_context: bool = False,
+    keep: int | None = None,
 ) -> list[PatternMatch]:
+    """Matches for the paths a query returns. With `keep`, the paths (longest first) are
+    reduced to at most `keep` maximal ones: a path whose edges all lie on a path already kept
+    is a prefix of it and adds nothing."""
     records, _ = await graph.read_records(query, params, timeout=15, max_rows=params["limit"])
+    if keep is not None:
+        kept: list[Any] = []
+        seen: list[set[str]] = []
+        for record in records:
+            rels = {r["id"] for r in record["p"].relationships}
+            if any(rels <= s for s in seen):
+                continue
+            kept.append(record)
+            seen.append(rels)
+            if len(kept) == keep:
+                break
+        records = kept
     matches = []
     for record in records:
         path: Path = record["p"]

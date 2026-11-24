@@ -101,8 +101,11 @@ class EvidenceGraph:
         return replace(self, excluded=self.excluded | frozenset(edge_ids))
 
     def only(self, edge_ids: set[str] | frozenset[str]) -> "EvidenceGraph":
+        """This view restricted to `edge_ids`. Edges already removed stay removed, so a circuit
+        searched inside `without(...)` can never borrow the edges taken out."""
         keep = frozenset(edge_ids)
-        return replace(self, excluded=frozenset(e for e in self.edge_ids() if e not in keep))
+        return replace(self, excluded=self.excluded
+                       | frozenset(e for e in self.edge_ids() if e not in keep))
 
     def account(self, account_id: str) -> AccountInfo | None:
         return self.accounts.get(account_id)

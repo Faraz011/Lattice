@@ -74,7 +74,7 @@ def make_handler(
         # Flagged verdicts carry the evidence circuit and its explanation (R13, R14).
         report = narrative = None
         if outcome.status != "closed_no_action":
-            report = build_report(evidence, scorer)
+            report = build_report(evidence, scorer, subject=case["seed_account_id"])
             narrative = await narrate(case["id"], report)
             if outcome.status == "awaiting_approval" and attribute is not None:
                 # A tier 2-3 action will be proposed: show what the LLM's judgement leaned on.

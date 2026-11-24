@@ -94,12 +94,42 @@ export interface LLMAttribution {
   note: string | null
 }
 
+export interface RouteInfo {
+  edges: string[] // the minimal proof
+  path: string[] // every edge the detectors used for this route
+  accounts: string[]
+  score: number
+}
+
+export interface FreezeWhatIf {
+  account_id: string
+  role: string | null
+  removed_edges: string[]
+  score_before: number
+  score_after: number
+  still_flagged: boolean
+  typology_after: string | null
+  backup_edges: string[]
+}
+
+export interface SizeCurve {
+  ranked_edges: string[]
+  scores: number[]
+  sufficient_at: number | null
+}
+
 export interface CircuitReport {
   circuit: Circuit
   counterfactuals: { counterfactuals: Counterfactual[]; note: string | null }
   reasons: Record<string, string>
   edges: EdgeDetail[]
   llm_attribution?: LLMAttribution | null
+  routes?: RouteInfo[]
+  route_relation?: string | null
+  roles?: Record<string, string>
+  freeze_whatifs?: FreezeWhatIf[]
+  size_curve?: SizeCurve | null
+  sar_draft?: string | null
 }
 
 export interface Narrative {

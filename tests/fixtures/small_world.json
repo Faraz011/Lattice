@@ -16149,6 +16149,8 @@
     "expected_verdict": "suspicious",
     "injected_transfer_id": null,
     "kind": "peeling_chain",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_67e8a1346d2b1c9a",
     "transfer_ids": [
      "tx_5cf6428f880796be",
@@ -16192,6 +16194,8 @@
     "expected_verdict": "suspicious",
     "injected_transfer_id": null,
     "kind": "peeling_chain",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_916e5d99357036fd",
     "transfer_ids": [
      "tx_63d7a6d2645fa486",
@@ -16241,6 +16245,8 @@
     "expected_verdict": "suspicious",
     "injected_transfer_id": "tx_a851815a3cfcb163",
     "kind": "fan_in_structuring",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_b908cfe18a159bd3",
     "transfer_ids": [
      "tx_a851815a3cfcb163",
@@ -16293,6 +16299,8 @@
     "expected_verdict": "suspicious",
     "injected_transfer_id": null,
     "kind": "fan_in_structuring",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_e8ee62c2d15502d6",
     "transfer_ids": [
      "tx_018c89e880bc427e",
@@ -16345,6 +16353,8 @@
     "expected_verdict": "suspicious",
     "injected_transfer_id": null,
     "kind": "fan_in_structuring",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_b3ee6d820da5fcaf",
     "transfer_ids": [
      "tx_e6579280be52ee0c",
@@ -16395,6 +16405,8 @@
     "expected_verdict": "suspicious",
     "injected_transfer_id": null,
     "kind": "fan_out",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_1a12824cf1b59366",
     "transfer_ids": [
      "tx_aaaf60fb74425840",
@@ -16442,6 +16454,8 @@
     "expected_verdict": "suspicious",
     "injected_transfer_id": null,
     "kind": "fan_out",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_9bb439c81ce51b32",
     "transfer_ids": [
      "tx_2a1c19747b6bdaba",
@@ -16475,6 +16489,8 @@
     "expected_verdict": "suspicious",
     "injected_transfer_id": null,
     "kind": "round_trip",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_2704e40d876a3e4a",
     "transfer_ids": [
      "tx_13b5630915dd777a",
@@ -16498,6 +16514,8 @@
     "expected_verdict": "suspicious",
     "injected_transfer_id": null,
     "kind": "round_trip",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_ce9e969f27d741f2",
     "transfer_ids": [
      "tx_7adbd5cb48afb05b",
@@ -16524,6 +16542,8 @@
     "expected_verdict": "suspicious",
     "injected_transfer_id": null,
     "kind": "rapid_layering",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_c3a9938dd28bc5f2",
     "transfer_ids": [
      "tx_4a4e60b819591ea4",
@@ -16553,6 +16573,8 @@
     "expected_verdict": "suspicious",
     "injected_transfer_id": null,
     "kind": "rapid_layering",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_1199e35ebbbe8772",
     "transfer_ids": [
      "tx_0fa6cea4eefda46b",
@@ -16584,6 +16606,8 @@
     "expected_verdict": "suspicious",
     "injected_transfer_id": null,
     "kind": "shared_device",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_263050efad7949a2",
     "transfer_ids": [
      "tx_d3b4e6c8cfd0d23e",
@@ -16611,6 +16635,8 @@
     "expected_verdict": "suspicious",
     "injected_transfer_id": null,
     "kind": "shared_device",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_4d18ca6eb34b2d44",
     "transfer_ids": [
      "tx_6daf1a3e689947c8",
@@ -16633,6 +16659,8 @@
     "expected_verdict": "suspicious",
     "injected_transfer_id": null,
     "kind": "exit_via_mixer",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_ecd8ce2268f6a9a3",
     "transfer_ids": [
      "tx_d9a521a7a7283ed5",
@@ -16657,6 +16685,8 @@
     "expected_verdict": "suspicious",
     "injected_transfer_id": null,
     "kind": "exit_via_mixer",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_0f32f3118b3b7080",
     "transfer_ids": [
      "tx_0dc8d975775917d2",
@@ -16694,6 +16724,8 @@
     "expected_verdict": "benign",
     "injected_transfer_id": null,
     "kind": "payroll_fan_out",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_0af4858f282d50a5",
     "transfer_ids": [
      "tx_06a73b351e1b3754",
@@ -16766,6 +16798,8 @@
     "expected_verdict": "benign",
     "injected_transfer_id": null,
     "kind": "payroll_fan_out",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_09111afc0b734c1c",
     "transfer_ids": [
      "tx_808cef81ee199f31",
@@ -16842,6 +16876,8 @@
     "expected_verdict": "benign",
     "injected_transfer_id": null,
     "kind": "merchant_fan_in",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_11224f51e90c54ef",
     "transfer_ids": [
      "tx_cd3417a6a5b58951",
@@ -16934,6 +16970,8 @@
     "expected_verdict": "benign",
     "injected_transfer_id": "tx_456f3390200084b8",
     "kind": "merchant_fan_in",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_17fbbab76000c402",
     "transfer_ids": [
      "tx_a17b2a9a1fc66f65",
@@ -17036,6 +17074,8 @@
     "expected_verdict": "benign",
     "injected_transfer_id": null,
     "kind": "merchant_fan_in",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_3876d21e254e87da",
     "transfer_ids": [
      "tx_2aceaf853858a9b8",
@@ -17112,6 +17152,8 @@
     "expected_verdict": "benign",
     "injected_transfer_id": null,
     "kind": "family_cycle",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_09e30d4c8c1b612f",
     "transfer_ids": [
      "tx_42660bb0d42213db",
@@ -17133,6 +17175,8 @@
     "expected_verdict": "benign",
     "injected_transfer_id": null,
     "kind": "family_cycle",
+    "roles": {},
+    "routes": [],
     "seed_account_id": "acct_135759af478557f4",
     "transfer_ids": [
      "tx_d0aeb74e4eeaea92",

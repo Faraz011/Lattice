@@ -4,15 +4,17 @@ import { api } from './api'
 import { AlertList } from './components/AlertList'
 import { CaseScreen } from './components/CaseScreen'
 import { InterpPanel } from './components/InterpPanel'
+import { ResearchPanel } from './components/ResearchPanel'
 import type { Alert } from './types'
 import { useLiveCase, useReplay } from './useCase'
 
-type Route = { kind: 'none' } | { kind: 'interp' } | { kind: 'case' | 'replay'; caseId: string }
+type Route = { kind: 'none' } | { kind: 'interp' } | { kind: 'research' }
+  | { kind: 'case' | 'replay'; caseId: string }
 
 function readRoute(): Route {
   const [kind, caseId] = window.location.hash.replace(/^#\/?/, '').split('/')
   if ((kind === 'case' || kind === 'replay') && caseId) return { kind, caseId }
-  if (kind === 'interp') return { kind }
+  if (kind === 'interp' || kind === 'research') return { kind }
   return { kind: 'none' }
 }
 
@@ -87,7 +89,10 @@ export default function App() {
             One investigator for everything
           </label>
         </fieldset>
-        <p><a href="#/interp" className="rail-link">Inside the model</a></p>
+        <p className="rail-links">
+          <a href="#/interp" className="rail-link">Inside the model</a>
+          <a href="#/research" className="rail-link">Same method on GPT-2</a>
+        </p>
         <h2 className="rail-title">Alerts</h2>
         {startError && <p className="error" role="alert">{startError}</p>}
         <AlertList alerts={alerts} error={alertsError}
@@ -100,6 +105,7 @@ export default function App() {
           onChanged={loadAlerts} />}
         {route.kind === 'replay' && <ReplayCase key={route.caseId} caseId={route.caseId} />}
         {route.kind === 'interp' && <InterpPanel />}
+        {route.kind === 'research' && <ResearchPanel />}
         {route.kind === 'none' && (
           <div className="welcome">
             <h1>Pick an alert to investigate</h1>

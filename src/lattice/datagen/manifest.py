@@ -23,6 +23,10 @@ class CaseRecord(BaseModel):
     injected_transfer_id: str | None = None
     # Links an injected case and its memo-free twin, in both directions.
     twin_case_id: str | None = None
+    # Showcase cases only: each member's planted role (originator, mule, collector, exit) and
+    # the transfers of each independent route the money can take.
+    roles: dict[str, str] = {}
+    routes: list[list[str]] = []
 
 
 class Manifest(BaseModel):

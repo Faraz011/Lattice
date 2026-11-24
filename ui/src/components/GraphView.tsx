@@ -14,16 +14,25 @@ export const BRASS = '#85661c'
 export interface GraphOptions {
   seed?: string
   removed?: ReadonlySet<string>
+  // Edges to draw as the proof instead of the report's circuit (the explanation-size slider).
+  proof?: readonly string[]
+  // A route that still carries the flag once something is frozen, drawn dashed as B1, B2...
+  backup?: readonly string[]
+  // The account a freeze what-if takes out.
+  frozen?: string | null
+  // Originator, mule or collector, added to account labels.
+  roles?: Record<string, string>
 }
 
 type Edge = EvidenceEdge | (EdgeDetail & { sources?: string[] })
 
 /** The circuit's edges in time order, numbered from 1: the order money moved. */
-export function circuitOrder(report: CircuitReport | null): Map<string, number> {
+export function circuitOrder(report: CircuitReport | null,
+  edges?: readonly string[]): Map<string, number> {
   const order = new Map<string, number>()
   if (!report || report.circuit.status !== 'circuit') return order
   const byId = new Map(report.edges.map((e) => [e.id, e]))
-  const sorted = [...report.circuit.circuit_edges].sort((a, b) =>
+  const sorted = [...(edges ?? report.circuit.circuit_edges)].sort((a, b) =>
     (byId.get(a)?.ts ?? '').localeCompare(byId.get(b)?.ts ?? '') || a.localeCompare(b))
   sorted.forEach((id, i) => order.set(id, i + 1))
   return order
@@ -44,17 +53,24 @@ export function graphElements(
   const nodeIds = new Set<string>(options.seed ? [options.seed] : [])
   for (const e of edges.values()) { nodeIds.add(e.src); nodeIds.add(e.dst) }
 
-  const circuit = new Set(report?.circuit.circuit_edges ?? [])
+  const proofEdges = options.proof ?? report?.circuit.circuit_edges ?? []
+  const circuit = new Set(proofEdges)
   const supporting = new Set(report?.circuit.supporting_edges ?? [])
-  const order = circuitOrder(report)
+  const order = circuitOrder(report, proofEdges)
+  const backup = new Set(options.backup ?? [])
+  const backupOrder = circuitOrder(report, options.backup ?? [])
   const judged = Boolean(report && report.circuit.status === 'circuit')
 
   const nodes: ElementDefinition[] = [...nodeIds].map((id) => {
     const kind = kinds.get(id) ?? (id.startsWith('dev_') ? 'device' : 'person')
     const classes = [kind === 'device' ? 'device' : 'account', `kind-${kind}`]
     if (id === options.seed) classes.push('seed')
+    if (id === options.frozen) classes.push('frozen')
     let label = ['person', 'device', 'cluster'].includes(kind) ? shortId(id) : `${shortId(id)} (${kind})`
+    const role = options.roles?.[id]
+    if (role) label = `${label}, ${role}`
     if (id === options.seed) label = `${label}, alerted`
+    if (id === options.frozen) label = `${label} (frozen)`
     return { group: 'nodes', data: { id, label, kind }, classes: classes.join(' ') }
   })
 
@@ -62,7 +78,10 @@ export function graphElements(
     const classes = [e.kind === 'device_link' ? 'device-link' : 'transfer']
     let label = e.kind === 'transfer' ? money(e.amount) : ''
     if (judged) {
-      if (circuit.has(e.id)) {
+      if (backup.has(e.id)) {
+        classes.push('backup')
+        label = `B${backupOrder.get(e.id)}. ${label || 'shared device'}`
+      } else if (circuit.has(e.id)) {
         classes.push('circuit')
         label = `${order.get(e.id)}. ${label || 'shared device'}`
       } else if (supporting.has(e.id)) {
@@ -111,6 +130,14 @@ const STYLE: cytoscape.StylesheetJson = [
     width: 5, 'line-color': SEAL, 'target-arrow-color': SEAL, opacity: 1, 'font-size': 12,
     'font-weight': 'bold', color: SEAL, 'z-index': 10, 'arrow-scale': 1,
   } },
+  { selector: 'edge.backup', style: {
+    width: 4, 'line-color': BRASS, 'target-arrow-color': BRASS, 'line-style': 'dashed',
+    'line-dash-pattern': [8, 4], opacity: 1, 'font-size': 12, 'font-weight': 'bold', color: BRASS,
+    'z-index': 9, 'arrow-scale': 1,
+  } },
+  { selector: 'node.frozen', style: { 'background-color': '#ffffff', 'border-width': 3,
+    'border-color': SEAL, shape: 'round-rectangle', width: 16, height: 16,
+    'font-weight': 'bold', color: SEAL, 'text-opacity': 1 } as cytoscape.Css.Node },
   { selector: 'edge.removed', style: { 'line-style': 'dotted', opacity: 0.45,
     'line-dash-pattern': [2, 4] } },
   { selector: ':selected', style: { 'overlay-color': BRASS, 'overlay-opacity': 0.25,
@@ -119,7 +146,7 @@ const STYLE: cytoscape.StylesheetJson = [
     'overlay-padding': 8 } as cytoscape.Css.Node },
 ]
 
-interface Props {
+interface Props extends GraphOptions {
   evidence: Evidence | null
   report: CircuitReport | null
   seed?: string
@@ -128,14 +155,16 @@ interface Props {
   onSelect: (id: string | null) => void
 }
 
-export function GraphView({ evidence, report, seed, removed, focusId, onSelect }: Props) {
+export function GraphView({ evidence, report, seed, removed, proof, backup, frozen, roles,
+  focusId, onSelect }: Props) {
   const container = useRef<HTMLDivElement>(null)
   const cy = useRef<Core | null>(null)
   const select = useRef(onSelect)
   useEffect(() => { select.current = onSelect }, [onSelect])
 
-  const elements = useMemo(() => graphElements(evidence, report, { seed, removed }),
-    [evidence, report, seed, removed])
+  const elements = useMemo(
+    () => graphElements(evidence, report, { seed, removed, proof, backup, frozen, roles }),
+    [evidence, report, seed, removed, proof, backup, frozen, roles])
 
   useEffect(() => {
     if (!container.current) return

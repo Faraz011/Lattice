@@ -52,6 +52,10 @@ class Pattern:
     device_ids: list[str] = field(default_factory=list)
     # Ordered route of the money where the pattern has one; used by tests, not the manifest.
     path: list[str] = field(default_factory=list)
+    # The answer key for role and route recovery (showcase patterns): each member account's
+    # role, and each independent route's transfers. Written to the manifest, never to Neo4j.
+    roles: dict[str, str] = field(default_factory=dict)
+    routes: list[list[str]] = field(default_factory=list)
 
 
 class WorldBuilder:

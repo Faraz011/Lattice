@@ -18,6 +18,7 @@ REASONS = {
     "payroll_fan_out": "many outbound transfers in a short period",
     "merchant_fan_in": "many inbound transfers in a short period",
     "family_cycle": "funds returned to originating account",
+    "parallel_mules": "large inbound split across new accounts",
 }
 
 

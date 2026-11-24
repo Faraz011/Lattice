@@ -8,11 +8,15 @@ import { shortId, typologyName } from '../ids'
 import type { CaseSession, ReplaySession } from '../useCase'
 import { ApprovalPanel, ReviewPanel, useApprover } from './ApprovalPanel'
 import { Counterfactuals } from './Counterfactuals'
+import { ExplanationSize } from './ExplanationSize'
+import { FreezeWhatIf } from './FreezeWhatIf'
 import { GraphView } from './GraphView'
 import { Inspector } from './Inspector'
 import { LlmAttribution } from './LlmAttribution'
 import { InvestigationTimeline, StageBar } from './InvestigationTimeline'
 import { Narrative } from './Narrative'
+import { RoutesPanel } from './RoutesPanel'
+import { SarDraft } from './SarDraft'
 import { VerdictCard } from './VerdictCard'
 
 const CONNECTION_WORDS: Record<Connection, string> = {
@@ -23,6 +27,15 @@ const CONNECTION_WORDS: Record<Connection, string> = {
 
 const DECIDED = ['awaiting_approval', 'needs_review', 'closed_no_action', 'actioned', 'rejected']
 
+// One way of looking at the evidence at a time, so overlays never fight on the graph.
+type Lens =
+  | { kind: 'none' }
+  | { kind: 'counterfactual'; index: number }
+  | { kind: 'freeze'; account: string }
+  | { kind: 'size'; k: number }
+
+const NONE: Lens = { kind: 'none' }
+
 interface Props {
   session: CaseSession
   replay?: ReplaySession
@@ -32,13 +45,21 @@ interface Props {
 export function CaseScreen({ session, replay, onChanged }: Props) {
   const { view, record, evidence } = session
   const [selected, setSelected] = useState<string | null>(null)
-  const [counterfactual, setCounterfactual] = useState<number | null>(null)
+  const [lens, setLens] = useState<Lens>(NONE)
   const [approver, setApprover] = useApprover()
 
   const report = view.report
-  const removed = useMemo(() => new Set(counterfactual != null && report
-    ? report.counterfactuals.counterfactuals[counterfactual]?.removed ?? [] : []),
-  [counterfactual, report])
+  const whatif = lens.kind === 'freeze'
+    ? report?.freeze_whatifs?.find((w) => w.account_id === lens.account) ?? null : null
+  const removed = useMemo(() => {
+    if (lens.kind === 'counterfactual' && report) {
+      return new Set(report.counterfactuals.counterfactuals[lens.index]?.removed ?? [])
+    }
+    return new Set(whatif?.removed_edges ?? [])
+  }, [lens, report, whatif])
+  const proof = useMemo(() => (lens.kind === 'size' && report?.size_curve
+    ? report.size_curve.ranked_edges.slice(0, lens.k) : undefined), [lens, report])
+  const backup = whatif?.backup_edges
 
   const status = view.status ?? record?.status ?? null
   const decided = status != null && DECIDED.includes(status) && view.verdict != null
@@ -90,14 +111,19 @@ export function CaseScreen({ session, replay, onChanged }: Props) {
       <div className="case-body">
         <div className="graph-area">
           <GraphView evidence={evidence} report={decided ? report : null}
-            seed={record?.seed_account_id} removed={removed} focusId={selected}
-            onSelect={setSelected} />
+            seed={record?.seed_account_id} removed={removed} proof={proof} backup={backup}
+            frozen={whatif?.account_id ?? null} roles={decided ? report?.roles : undefined}
+            focusId={selected} onSelect={setSelected} />
           {decided && report?.circuit.status === 'circuit' && (
             <p className="legend">
               <span className="key key-circuit">Numbered red edges: the circuit, the smallest set
                 that alone keeps the verdict</span>
               <span className="key key-support">Dark: other edges the detectors used</span>
               <span className="key key-context">Faded: queried but not used</span>
+              {backup && backup.length > 0 && (
+                <span className="key key-backup">Dashed, B1, B2...: the route that still
+                  proves the case after the freeze</span>
+              )}
             </p>
           )}
           {evidence?.truncated && <p className="muted">Showing the first 600 edges found.</p>}
@@ -126,9 +152,28 @@ export function CaseScreen({ session, replay, onChanged }: Props) {
               <VerdictCard verdict={view.verdict} report={report} outcome={status}
                 reason={view.statusReason ?? record?.status_reason} />
               {view.narrative && <Narrative narrative={view.narrative} onFocus={setSelected} />}
+              {report?.routes && report.routes.length > 0 && (
+                <RoutesPanel routes={report.routes} roles={report.roles ?? {}}
+                  relation={report.route_relation} onFocus={setSelected} />
+              )}
+              {report?.freeze_whatifs && report.freeze_whatifs.length > 0 && (
+                <FreezeWhatIf whatifs={report.freeze_whatifs}
+                  threshold={report.circuit.threshold}
+                  active={lens.kind === 'freeze' ? lens.account : null}
+                  onSelect={(account) => setLens(account ? { kind: 'freeze', account } : NONE)}
+                  onFocus={setSelected} />
+              )}
+              {report?.size_curve && (
+                <ExplanationSize curve={report.size_curve}
+                  fullScore={report.circuit.full_score} threshold={report.circuit.threshold}
+                  size={lens.kind === 'size' ? lens.k : null}
+                  onSize={(k) => setLens(k == null ? NONE : { kind: 'size', k })} />
+              )}
               {report?.circuit.status === 'circuit' && (
-                <Counterfactuals report={report} active={counterfactual}
-                  onToggle={setCounterfactual} />
+                <Counterfactuals report={report}
+                  active={lens.kind === 'counterfactual' ? lens.index : null}
+                  onToggle={(index) => setLens(index == null ? NONE
+                    : { kind: 'counterfactual', index })} />
               )}
               {report?.llm_attribution && (
                 <LlmAttribution attribution={report.llm_attribution} onFocus={setSelected} />
@@ -144,6 +189,7 @@ export function CaseScreen({ session, replay, onChanged }: Props) {
                   onApprove={() => after(api.approve(action.id, approver))}
                   onReject={(reason) => after(api.reject(action.id, approver, reason))} />
               )}
+              {report?.sar_draft && <SarDraft text={report.sar_draft} />}
               {status === 'awaiting_approval' && !action && (
                 <p className="muted">Escalated for approval. No action has been proposed for this
                   case yet.</p>

@@ -29,13 +29,14 @@ class SizeSpec:
     per_decoy: int
     injected_planted: int
     injected_decoys: int
+    showcase: int = 0  # cases of each showcase typology, appended last
 
 
 SIZES: dict[str, SizeSpec] = {
     "fixture": SizeSpec(persons=60, businesses=8, per_typology=2, per_decoy=2,
                         injected_planted=1, injected_decoys=1),
     "demo": SizeSpec(persons=6_000, businesses=300, per_typology=6, per_decoy=6,
-                     injected_planted=3, injected_decoys=3),
+                     injected_planted=3, injected_decoys=3, showcase=2),
 }
 
 
@@ -77,6 +78,15 @@ def generate_world(seed: int, size: WorldSize) -> World:
             record.twin_case_id, twin.twin_case_id = twin.case_id, record.case_id
             cases.append(twin)
 
+    # Showcase cases come last, from a stream of their own: every case above, and every ID it
+    # was given, is exactly what it was before showcases existed.
+    showcase_rng = random.Random(f"showcase:{seed}")
+    for fn in typologies.SHOWCASE:
+        for n in range(1, spec.showcase + 1):
+            start = WINDOW_START + days(showcase_rng.uniform(5, 70))
+            pattern = fn(b, random.Random(showcase_rng.getrandbits(64)), start)
+            cases.append(_record(b, f"planted-{fn.__name__}-{n:02d}", "planted", pattern))
+
     manifest = Manifest(
         world=size, seed=seed, reporting_threshold=REPORTING_THRESHOLD, cases=cases
     )
@@ -100,4 +110,6 @@ def _record(b: WorldBuilder, case_id: str, category: str, pattern: Pattern) -> C
         account_ids=pattern.account_ids,
         transfer_ids=pattern.transfer_ids,
         device_ids=pattern.device_ids,
+        roles=pattern.roles,
+        routes=pattern.routes,
     )
