@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 
 import type { Net } from '../model/net'
 import { trace } from '../model/trace'
-import { cutIn, features, newWorld, reference, step, stepOut, type Physics } from '../sim/driving'
+import {
+  cutIn, features, newWorld, reference, step, stepOut, worldFromMap, type Physics, type RouteMap,
+} from '../sim/driving'
 
 const net: Net = JSON.parse(readFileSync('public/models/driving.json', 'utf8'))
 const physics = net.physics as unknown as Physics
@@ -63,4 +65,24 @@ describe('a live scene', () => {
     expect(net.outputs[t.choice].id).toBe('brake')
     expect(t.circuit).not.toBeNull()
   })
+})
+
+describe('the London route', () => {
+  const map: RouteMap = JSON.parse(readFileSync('public/maps/london.json', 'utf8'))
+
+  it('places real junctions and crossings, and the car laps it without an incident', () => {
+    const w = worldFromMap(map, 4)
+    expect(w.lights.length).toBeGreaterThan(20)
+    expect(w.crosswalks.length).toBeGreaterThan(20)
+    let seed = 11
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+    for (let t = 0; t < 12_000; t++) { // 20 minutes
+      if (t % 300 === 150) stepOut(w, physics)
+      if (t % 900 === 450) cutIn(w)
+      step(w, physics, net, {}, undefined, rand)
+    }
+    expect(w.odometer).toBeGreaterThan(map.length_m) // at least a full lap
+    expect(w.car.at).toBeLessThan(map.length_m)
+    expect(w.incidents, JSON.stringify(w.incidents)).toEqual([])
+  }, 60_000)
 })
