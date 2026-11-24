@@ -53,6 +53,19 @@ INPUTS = [
             "daylight"),
 ]
 
+# Things in the scene, as groups of inputs. The tracer takes a thing away whole (the light, its
+# colour and its distance together): taking one input away alone makes situations that never
+# happen, such as a light with no colour, and the network's answer to those means nothing.
+GROUPS = [
+    {"label": "the traffic light", "inputs": ["light_red", "light_yellow", "light_green",
+                                             "light_near"]},
+    {"label": "the crosswalk", "inputs": ["ped_crossing", "ped_waiting", "crosswalk_near"]},
+    {"label": "the car ahead", "inputs": ["lead_car", "lead_near", "closing"]},
+    {"label": "speed", "inputs": ["speed"]},
+    {"label": "rain", "inputs": ["rain"]},
+    {"label": "night", "inputs": ["night"]},
+]
+
 OUTPUTS = [
     Feature("accelerate", "accelerate"),
     Feature("cruise", "cruise"),
@@ -60,6 +73,8 @@ OUTPUTS = [
 ]
 
 ACCELERATE, CRUISE, BRAKE = 0, 1, 2
+HOLD_SPEED = 0.08  # under about 6 km/h the car counts as stopped
+HOLD = 0.2  # and holds for hazards within about 24 m
 IDX = {f.id: i for i, f in enumerate(INPUTS)}
 
 
@@ -73,13 +88,19 @@ def stopping_distance(speed: float, rain: bool) -> float:
 def expert(x: np.ndarray) -> int:
     """The rule-based driver the policy imitates. One situation in, one action out."""
     speed, rain = x[IDX["speed"]], x[IDX["rain"]] > 0.5
-    zone = stopping_distance(speed, rain) + 0.06  # brake once a hazard is this close
+    # Brake once a hazard is this close: the stopping distance plus a margin of about 12 m.
+    zone = stopping_distance(speed, rain) + 0.1
+    # Once stopped, stay stopped for anything within about 24 m: a driver waiting at a red light
+    # does not roll toward a pedestrian on the crosswalk just beyond it.
+    if speed < HOLD_SPEED:
+        zone = max(zone, HOLD)
     hazards = []
     light = 1 - x[IDX["light_near"]]
     if x[IDX["light_red"]] > 0.5:
         hazards.append(light)
-    if x[IDX["light_yellow"]] > 0.5 and light > stopping_distance(speed, rain) * 0.5:
-        hazards.append(light)  # too close to stop on yellow: go through
+    # Too close to stop on yellow even braking hard (6 against 4 m/s2): go through.
+    if x[IDX["light_yellow"]] > 0.5 and light > stopping_distance(speed, rain) * 0.7:
+        hazards.append(light)  # far enough to stop on yellow: stop
     crosswalk = 1 - x[IDX["crosswalk_near"]]
     if x[IDX["ped_crossing"]] > 0.5 or x[IDX["ped_waiting"]] > 0.5:
         hazards.append(crosswalk)
@@ -104,7 +125,7 @@ def sample(n: int, seed: int) -> np.ndarray:
     x[:, IDX["night"]] = rng.random(n) < 0.5
 
     light = rng.random(n) < 0.6
-    colour = rng.choice(3, n, p=[0.45, 0.2, 0.35])
+    colour = rng.choice(3, n, p=[0.4, 0.3, 0.3])  # yellow is where the choice is hardest
     for k, name in enumerate(["light_red", "light_yellow", "light_green"]):
         x[:, IDX[name]] = light & (colour == k)
     x[:, IDX["light_near"]] = np.where(light, 1 - rng.uniform(0, 1, n) ** 1.5, 0.0)
@@ -119,6 +140,15 @@ def sample(n: int, seed: int) -> np.ndarray:
     x[:, IDX["lead_car"]] = lead
     x[:, IDX["lead_near"]] = np.where(lead, 1 - rng.uniform(0, 1, n) ** 1.5, 0.0)
     x[:, IDX["closing"]] = np.where(lead, np.clip(rng.normal(0.1, 0.2, n), 0, 1), 0.0)
+
+    # A quarter of the situations: slow or stopped, close to a hazard. Uniform sampling rarely
+    # lands here, yet it is where a car waits at every red light, and where an unsure network
+    # creeps forward one tick at a time.
+    slow = rng.random(n) < 0.25
+    x[slow, IDX["speed"]] = rng.uniform(0, 0.2, slow.sum())
+    for near in ("light_near", "crosswalk_near", "lead_near"):
+        has = x[:, IDX[near]] > 0
+        x[slow & has, IDX[near]] = rng.uniform(0.8, 1.0, (slow & has).sum())
     return x
 
 
@@ -135,14 +165,16 @@ def concepts(x: np.ndarray) -> dict[str, np.ndarray]:
         "car ahead too close", "too fast", "below cruising speed", "at cruising speed", "rain")}
     for row in x:
         speed, rain = row[IDX["speed"]], row[IDX["rain"]] > 0.5
-        zone = stopping_distance(speed, rain) + 0.06
+        zone = stopping_distance(speed, rain) + 0.1
+        if speed < HOLD_SPEED:
+            zone = max(zone, HOLD)
         light = 1 - row[IDX["light_near"]]
         crosswalk = 1 - row[IDX["crosswalk_near"]]
         gap = 1 - row[IDX["lead_near"]]
         target = 0.5 if rain else 0.75
         out["red light ahead to stop for"].append(row[IDX["light_red"]] > 0.5 and light < zone)
         out["yellow light to stop for"].append(
-            row[IDX["light_yellow"]] > 0.5 and stopping_distance(speed, rain) * 0.5 < light < zone)
+            row[IDX["light_yellow"]] > 0.5 and stopping_distance(speed, rain) * 0.7 < light < zone)
         out["pedestrian in the path"].append(
             (row[IDX["ped_crossing"]] > 0.5 or row[IDX["ped_waiting"]] > 0.5) and crosswalk < zone)
         out["car ahead too close"].append(

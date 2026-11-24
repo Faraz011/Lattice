@@ -29,8 +29,8 @@ EPISODE_SEED = 4242
 def train_driving() -> dict:
     x, y = driving.dataset(60_000, seed=1)
     xt, yt = driving.dataset(10_000, seed=2)
-    net = train(MLP.init([len(driving.INPUTS), 12, 8, len(driving.OUTPUTS)], seed=0), x, y,
-                epochs=60, output_bias=False, dropout=0.1)
+    net = train(MLP.init([len(driving.INPUTS), 16, 8, len(driving.OUTPUTS)], seed=0), x, y,
+                epochs=160, output_bias=False, dropout=0.1)
     return export(
         net, name="driving", title="Self-driving car", inputs=driving.INPUTS,
         outputs=driving.OUTPUTS,
@@ -39,7 +39,7 @@ def train_driving() -> dict:
         metrics={"agreement_with_expert": round(accuracy(net, xt, yt), 4),
                  "test_situations": len(yt)},
         notes="Imitates a rule-based expert driver over 60,000 sampled situations.", data=x,
-    ) | {"physics": driving.PHYSICS}
+    ) | {"physics": driving.PHYSICS, "groups": driving.GROUPS}
 
 
 def train_aml() -> dict:
@@ -59,7 +59,10 @@ def train_aml() -> dict:
                  "test_accounts": len(yt)},
         notes="Trained on 12 synthetic worlds with planted laundering; tested on 4 others.",
         data=x,
-    )
+    ) | {
+        # What the tracer compares a flagged account with: the average clear account.
+        "reference": np.round(x[y == aml.CLASS["clear"]].mean(axis=0), 5).tolist(),
+    }
 
 
 def _case(p, category: str) -> CaseRecord:

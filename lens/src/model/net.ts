@@ -38,6 +38,8 @@ export interface Net {
   neurons: NeuronInfo[]
   metrics: Record<string, unknown>
   physics?: Record<string, number>
+  // Things in the scene, as groups of input ids; the tracer takes a thing away whole.
+  groups?: { label: string; inputs: string[] }[]
 }
 
 export interface Ablation {

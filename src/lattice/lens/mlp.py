@@ -166,7 +166,7 @@ def label_neurons(net: MLP, x: np.ndarray, inputs: list[Feature], outputs: list[
                     label = f"{best} or {second}" if second_c > max(0.3, best_c / 2) else best
                 else:
                     worst_c, worst = min(ranked)
-                    label = f"quiet when {worst}" if worst_c < -0.2 else label
+                    label = f"on unless {worst}" if worst_c < -0.2 else label
             out.append({**entry, "dead": False, "fires_on": fires,
                         "concepts": [{"concept": n, "corr": round(c, 2)} for c, n in ranked[:3]],
                         "pushes": outputs[int(np.argmax(push))].id, "label": label})

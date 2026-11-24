@@ -39,25 +39,34 @@ describe('the circuit', () => {
 })
 
 describe('the backup route', () => {
-  it('appears when two hazards each demand braking, from different detectors', () => {
-    const t = trace(net, redAndPedestrian, emptyRoad)
+  const stoppedAtTheLight = situation({ speed: 0, light_red: 1, light_near: 0.89, ped_crossing: 1,
+    crosswalk_near: 0.84 })
 
-    expect(t.choice).toBe(BRAKE)
-    expect(t.backup).not.toBeNull()
-    const firstDetectors = t.circuit!.hidden.filter((n) => n.startsWith('h1_'))
-    expect(t.backup!.hidden.some((n) => firstDetectors.includes(n))).toBe(false)
-    expect(t.backup!.margin).toBeGreaterThan(0)
+  it('is a second, separate reason in the scene when two hazards each demand braking', () => {
+    for (const x of [redAndPedestrian, stoppedAtTheLight]) {
+      const t = trace(net, x, emptyRoad.map((v, i) => (i === IDX.speed ? x[i] : v)))
+
+      expect(t.choice).toBe(BRAKE)
+      expect(t.backup).not.toBeNull()
+      expect(t.backup!.inputs.some((i) => t.circuit!.inputs.includes(i))).toBe(false)
+      expect(t.backup!.margin).toBeGreaterThan(0)
+    }
   })
 
-  it('is missing when only one hazard is present', () => {
+  it("keeps the car braking when the circuit's detectors are switched off", () => {
+    const t = trace(net, stoppedAtTheLight, situation({ speed: 0 }))
+    const off = forward(net, stoppedAtTheLight, { nodes: new Set(t.circuit!.fired) })
+
+    expect(t.circuit!.fired.length).toBeGreaterThan(0)
+    expect(off.choice).toBe(BRAKE)
+  })
+
+  it('is missing when only one hazard is present: that evidence is essential', () => {
     const t = trace(net, redLight, emptyRoad)
 
-    if (t.backup === null) {
-      const detectors = t.circuit!.hidden.filter((n) => n.startsWith('h1_'))
-      const values = t.reference.acts
-      expect(forward(net, redLight, { nodes: new Set(detectors), values }).choice)
-        .not.toBe(BRAKE)
-    }
+    expect(t.backup).toBeNull()
+    const without = situation({ speed: 0.6 })
+    expect(forward(net, without).choice).not.toBe(BRAKE)
   })
 })
 
