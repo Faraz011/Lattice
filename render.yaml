@@ -1,0 +1,140 @@
+# Lattice on Render (R20, KTD12): one image, one service per role. See docs/deploy.md.
+#
+# Before applying: set LATTICE_GEMINI_API_KEY when Render asks for it (or LATTICE_MODEL=scripted
+# for an offline demo). The Neo4j password and the approver token are generated here; read the
+# token from the lattice-shared environment group to approve actions in the UI.
+
+envVarGroups:
+  - name: lattice-shared
+    envVars:
+      - key: LATTICE_NEO4J_USER
+        value: neo4j
+      - key: LATTICE_NEO4J_PASSWORD
+        generateValue: true
+      - key: LATTICE_APPROVER_TOKEN
+        generateValue: true
+      - key: LATTICE_MODEL
+        value: google:gemini-flash-latest
+      - key: LATTICE_GEMINI_API_KEY
+        sync: false
+      - key: LATTICE_LLM_REQUESTS_PER_MINUTE
+        value: "10"
+      - key: LATTICE_LLM_REQUESTS_PER_DAY
+        value: "1500"
+      - key: LATTICE_MAX_ACTIVE_CASES
+        value: "5"
+      - key: LATTICE_MAX_CASES_PER_DAY
+        value: "50"
+
+services:
+  # --- data ----------------------------------------------------------------------------------
+  - type: pserv
+    name: lattice-neo4j
+    runtime: docker
+    plan: standard  # 2 GB: Neo4j with GDS needs it (heap 1 GB + page cache 512 MB)
+    dockerfilePath: ./deploy/neo4j/Dockerfile
+    dockerContext: ./deploy/neo4j
+    disk:
+      name: neo4j-data
+      mountPath: /data
+      sizeGB: 10
+    envVars:
+      - fromGroup: lattice-shared
+
+  - type: keyvalue
+    name: lattice-redis
+    plan: starter  # the free plan loses queued jobs on restart
+    maxmemoryPolicy: noeviction  # job streams and fan-in state must never be evicted
+    ipAllowList: []  # private network only
+
+  # --- roles (one image) ---------------------------------------------------------------------
+  - type: pserv
+    name: lattice-mcp
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerCommand: lattice mcp --host 0.0.0.0 --port 8000
+    envVars: &role-env
+      - fromGroup: lattice-shared
+      - key: LATTICE_NEO4J_URI
+        fromService:
+          type: pserv
+          name: lattice-neo4j
+          property: host  # Lattice adds bolt:// and :7687
+      - key: LATTICE_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: lattice-redis
+          property: connectionString
+      - key: LATTICE_MCP_URL
+        fromService:
+          type: pserv
+          name: lattice-mcp
+          property: host  # Lattice adds http://, :8000 and /mcp
+
+  - type: web
+    name: lattice-api
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerCommand: lattice api
+    # Loads the demo world into an empty database and imports committed replay recordings.
+    preDeployCommand: lattice seed --if-empty
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: lattice-shared
+      - key: LATTICE_NEO4J_URI
+        fromService: {type: pserv, name: lattice-neo4j, property: host}
+      - key: LATTICE_REDIS_URL
+        fromService: {type: keyvalue, name: lattice-redis, property: connectionString}
+      - key: LATTICE_MCP_URL
+        fromService: {type: pserv, name: lattice-mcp, property: host}
+      # The UI's public address. Change it if Render gives the static site another name.
+      - key: LATTICE_CORS_ORIGINS
+        value: '["https://lattice-ui.onrender.com"]'
+
+  - type: worker
+    name: lattice-orchestrator
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerCommand: lattice worker orchestrator
+    envVars: *role-env
+
+  - type: worker
+    name: lattice-investigator
+    runtime: docker
+    plan: starter
+    numInstances: 2  # raise to run more hypotheses at once; they share one queue
+    dockerfilePath: ./Dockerfile
+    dockerCommand: lattice worker investigator
+    envVars: *role-env
+
+  - type: worker
+    name: lattice-verifier
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerCommand: lattice worker verifier
+    envVars: *role-env
+
+  - type: worker
+    name: lattice-action
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerCommand: lattice worker action
+    envVars: *role-env
+
+  # --- UI ------------------------------------------------------------------------------------
+  - type: web
+    name: lattice-ui
+    runtime: static
+    rootDir: ui
+    buildCommand: npm ci && npm run build && npm run check:bundle
+    staticPublishPath: dist
+    envVars:
+      # The API's public address, compiled into the bundle. Change it if Render names the
+      # API service differently. The approver token is never set here.
+      - key: VITE_API_URL
+        value: https://lattice-api.onrender.com

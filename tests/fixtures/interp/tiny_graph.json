@@ -1,0 +1,21 @@
+{
+  "metadata": {"slug": "tool-choice-test", "scan": "qwen3-0.6b", "transcoder_list": [],
+               "prompt_tokens": ["Which", " tool", " peeling", " chain", " Answer", ":"],
+               "prompt": "Which tool ... Answer:", "node_threshold": 0.8, "schema_version": 1},
+  "qParams": {"pinnedIds": [], "supernodes": [], "linkType": "both", "clickedId": "", "sg_pos": ""},
+  "nodes": [
+    {"node_id": "E_101_2", "feature": 101, "layer": "E", "ctx_idx": 2, "feature_type": "embedding", "jsNodeId": "E_101_2", "clerp": "Emb: \" peeling\""},
+    {"node_id": "12_4400_3", "feature": 4400, "layer": "12", "ctx_idx": 3, "feature_type": "cross layer transcoder", "jsNodeId": "12_4400_3", "clerp": "laundering shapes", "influence": 0.41, "activation": 3.2},
+    {"node_id": "20_77_5", "feature": 77, "layer": "20", "ctx_idx": 5, "feature_type": "cross layer transcoder", "jsNodeId": "20_77_5", "clerp": "", "influence": 0.22, "activation": 1.1},
+    {"node_id": "18_err_5", "feature": -1, "layer": "18", "ctx_idx": 5, "feature_type": "mlp reconstruction error", "jsNodeId": "18_err_5", "clerp": ""},
+    {"node_id": "27_9_5", "feature": 9, "layer": "27", "ctx_idx": 5, "feature_type": "logit", "jsNodeId": "27_9_5", "clerp": "Output \" C\" (p=0.612)", "token_prob": 0.612, "is_target_logit": true},
+    {"node_id": "27_7_5", "feature": 7, "layer": "27", "ctx_idx": 5, "feature_type": "logit", "jsNodeId": "27_7_5", "clerp": "Output \" A\" (p=0.201)", "token_prob": 0.201}
+  ],
+  "links": [
+    {"source": "E_101_2", "target": "12_4400_3", "weight": 0.9},
+    {"source": "12_4400_3", "target": "27_9_5", "weight": 0.5},
+    {"source": "20_77_5", "target": "27_9_5", "weight": -0.2},
+    {"source": "18_err_5", "target": "27_9_5", "weight": 0.3},
+    {"source": "20_77_5", "target": "27_7_5", "weight": 0.4}
+  ]
+}
