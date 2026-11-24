@@ -17,6 +17,8 @@ x-lattice: &lattice
     LATTICE_REDIS_URL: redis://redis:6379/0
     LATTICE_MCP_URL: http://mcp:8000/mcp
     LATTICE_MODEL: ${LATTICE_MODEL:-google:gemini-flash-latest}
+    # Judge calls per verdict for the LLM attribution; 0 skips it (it waits on the rate limit).
+    LATTICE_LLM_ATTRIBUTION_SAMPLES: ${LATTICE_LLM_ATTRIBUTION_SAMPLES:-16}
     LATTICE_CORS_ORIGINS: '["http://localhost:${LATTICE_UI_PORT:-8081}"]'
   depends_on: &lattice-deps
     neo4j:

@@ -17,6 +17,11 @@ Use the scripted model for a demo that can't fail on a rate limit, or a Gemini k
 agents. Run both showcase alerts once beforehand, so their replays exist as a fallback
 (every verdict is saved as a replay).
 
+Verification takes about 2.5 minutes per case. The LLM attribution asks the judge 16 times,
+and those calls wait on the 10-a-minute rate limit even with the scripted model. For a live
+run in front of the panel, either open the cases you ran beforehand, or start the stack with
+`LATTICE_LLM_ATTRIBUTION_SAMPLES=0` to skip that panel; verification then takes seconds.
+
 | Alert | Case | Why |
 | --- | --- | --- |
 | `alert_b5b2e6b091b6cd4e` | planted-parallel_mules-01 | The star: two parallel mule routes, one planted as a backup. |
@@ -34,8 +39,9 @@ agents. Run both showcase alerts once beforehand, so their replays exist as a fa
    the red circuit. Reading the circuit alone, the case should collapse. It doesn't: the score
    stays at 0.67, the frozen account is marked, and a dashed route, B1–B4, lights up. The money
    still reaches the collector through a second mule chain. "No single account here is
-   essential." Then open the contrast alert and freeze a mule: "The case no longer flags. This
-   account is essential."
+   essential." Then open the contrast alert and freeze a mule in the middle of the chain (the
+   third, `acct_eaf60e`): "The case no longer flags. This account is essential." Only the 3
+   middle mules are; freezing an account at either end leaves a chain long enough to flag.
 4. **Explanation size (30 s).** Drag "How much explanation do you want?". Below the minimal
    size, the strongest transfers alone don't flag; at it, they do; above it, you see how much
    of the full score each extra transfer adds.

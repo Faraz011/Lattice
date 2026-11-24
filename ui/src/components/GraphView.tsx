@@ -231,13 +231,13 @@ export function GraphView({ evidence, report, seed, removed, proof, backup, froz
   useEffect(() => {
     const instance = cy.current
     if (!instance || instance.nodes().empty()) return
+    // Without a backup route there is nothing to point at: the case falls, so show all of it.
     let target = instance.collection()
-    for (const id of [...(backup ?? []), ...(frozen ? [frozen] : [])]) {
-      target = target.union(instance.getElementById(id))
-    }
+    for (const id of backup ?? []) target = target.union(instance.getElementById(id))
+    if (target.nonempty() && frozen) target = target.union(instance.getElementById(frozen))
     target = target.union(target.connectedNodes())
     instance.animate({ fit: { eles: target.nonempty() ? target : instance.elements(),
-      padding: 50 }, duration: 400 })
+      padding: 90 }, duration: 400 })  // room for the labels, which sit outside the nodes
   }, [backupKey, frozen])  // backup by value: a new array with the same edges is no change
 
   const count = evidence?.edges.length ?? 0
