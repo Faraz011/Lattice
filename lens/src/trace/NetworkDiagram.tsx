@@ -7,7 +7,7 @@ import type { Trace } from '../model/trace'
 const W = 1000
 const ROW = 40
 const TOP = 46
-const COLS = [250, 450, 690, 860]
+const COLS = [300, 480, 700, 860] // the first leaves room for long input names
 const SEAL = '#a3233a'
 const BRASS = '#85661c'
 

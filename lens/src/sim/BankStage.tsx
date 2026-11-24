@@ -106,6 +106,14 @@ export function BankStage({ net, episode, off, send }: Props) {
               </g>
             )
           })()}
+          <g aria-hidden="true">
+            <circle cx={24} cy={H - 66} r={6} fill="#a3233a" stroke="#1e2942" strokeWidth={1.5} />
+            <text x={36} y={H - 62} className="label">flagged by the check</text>
+            <rect x={18} y={H - 48} width={12} height={12} rx={2} fill="#a3233a" />
+            <text x={36} y={H - 38} className="label">frozen by the agent</text>
+            <circle cx={24} cy={H - 18} r={8} fill="none" stroke="#85661c" strokeWidth={3} />
+            <text x={36} y={H - 14} className="label">traced on the other device</text>
+          </g>
           {episode.accounts.map((a) => {
             const p = pos.get(a.id)!
             const v = b.verdicts.get(a.id)
@@ -126,10 +134,11 @@ export function BankStage({ net, episode, off, send }: Props) {
                   : <circle cx={p.x} cy={p.y} r={a.kind === 'person' ? 6 : 8}
                     fill={flagged ? '#a3233a' : a.kind === 'person' ? '#f6f8f3' : '#dee6dc'}
                     stroke="#1e2942" strokeWidth={1.5} opacity={flagged ? Math.max(0.5, v!.confidence) : 1} />}
-                {(flagged || isFocus || a.kind !== 'person') && (
-                  <text x={p.x + 11} y={p.y + 4} className={flagged ? 'label' : 'label soft'}>
+                {(isFocus || a.kind !== 'person') && (
+                  <text x={p.x + 14} y={p.y + 4} className={isFocus ? 'label' : 'label soft'}
+                    style={{ fontWeight: isFocus ? 700 : 400 }}>
                     {a.kind !== 'person' ? a.owner : shortId(a.id)}
-                    {flagged ? `: ${net.outputs[v!.choice].label}` : ''}
+                    {isFocus && flagged ? `: ${net.outputs[v!.choice].label}` : ''}
                   </text>
                 )}
               </g>

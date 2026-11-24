@@ -1,0 +1,24 @@
+# The two-device demo (Lattice Lens) as one small web service: the built pages, and the relay
+# that pairs the devices. It needs nothing else from the Lattice stack: no Neo4j, no Redis, no
+# model key. The networks run in the browser from the JSON files in lens/public.
+#
+#   docker build -f Dockerfile.lens -t lattice-lens .
+#   docker run --rm -p 8090:8090 lattice-lens            # then open http://localhost:8090
+
+FROM node:20-alpine AS pages
+WORKDIR /lens
+COPY lens/package.json lens/package-lock.json lens/.npmrc ./
+RUN npm ci --no-audit --no-fund
+COPY lens/ ./
+RUN npm run build
+
+FROM python:3.11-slim
+WORKDIR /app
+RUN pip install --no-cache-dir "fastapi>=0.115" "uvicorn[standard]>=0.30" \
+    && useradd --create-home lens
+COPY src/lattice/lens/relay.py ./relay.py
+COPY --from=pages /lens/dist ./dist
+USER lens
+ENV PORT=8090
+EXPOSE 8090
+CMD ["python", "relay.py", "--static", "dist"]

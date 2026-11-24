@@ -1,0 +1,13 @@
+# Lattice Lens on Render: one free web service. Kept apart from the root render.yaml, which
+# deploys the whole AML stack on paid plans. In Render: New > Blueprint, pick this repository,
+# and set the blueprint path to deploy/lens/render.yaml. See docs/two-device-demo.md.
+
+services:
+  - type: web
+    name: lattice-lens
+    runtime: docker
+    plan: free  # sleeps after 15 minutes idle; open it a minute before the demo
+    dockerfilePath: ./Dockerfile.lens
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
