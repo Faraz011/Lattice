@@ -47,3 +47,6 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "ruff>=0.17.1",
 ]
+lens = [
+    "numpy>=2.4.6",
+]
