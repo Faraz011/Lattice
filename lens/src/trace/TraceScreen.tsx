@@ -9,10 +9,13 @@ import type { Net } from '../model/net'
 import { trace as traceDecision, type Trace } from '../model/trace'
 import { useModels } from '../model/useModels'
 import { sentence } from './Analytics'
+import { ablationStudy, hiddenActivity, logitAttribution, sensitivity } from '../model/studies'
 import { Network3D } from './Network3D'
+import { NetworkGraph } from './NetworkGraph'
 import {
-  CircuitGraph, DecisionLog, InputsPanel, NeuronCard, OUTPUT_COLOURS, Panel, Telemetry, type Moment,
+  DecisionLog, InputsPanel, NeuronCard, OUTPUT_COLOURS, Panel, Telemetry, type Moment,
 } from './panels'
+import { AblationTable, LogitBars, Raster, SensitivityCurves } from './StudyPanels'
 
 const HISTORY = 240 // about a minute of decisions at four a second
 const AGAINST: Record<Scenario, string> = {
@@ -56,7 +59,7 @@ export function TraceScreen({ room }: { room: string }) {
     const m: Moment = { at: live.at, x: live.x, reference: live.reference, title: live.title,
       context: live.context, probs: lt.run.probs, choice: lt.choice, margin: lt.margin,
       cause: lt.circuit ? lt.circuit.evidence.join(' + ') : 'nothing unusual',
-      backup: lt.backup ? lt.backup.evidence.join(' + ') : '' }
+      backup: lt.backup ? lt.backup.evidence.join(' + ') : '', acts: hiddenActivity(lt) }
     setHistory((h) => ({ ...h, [scenario]: [...h[scenario], m].slice(-HISTORY) }))
     setLog((l) => {
       const prev = l[scenario][l[scenario].length - 1]
@@ -86,6 +89,18 @@ export function TraceScreen({ room }: { room: string }) {
   const pick = (m: Moment) => setHeld(m)
 
   const decision = net && t ? net.outputs[t.choice] : null
+  const base = useMemo(() => ({ nodes: offSet }), [offSet])
+  const ablations = useMemo(() => (net && scene && t ? ablationStudy(net, scene.x, t, base) : []),
+    [net, scene, t, base])
+  const logits = useMemo(() => (net && t ? logitAttribution(net, t) : []), [net, t])
+  const sweeps = useMemo(() => (net && scene && t ? sensitivity(net, scene.x, t, base) : []),
+    [net, scene, t, base])
+
+  // The console is dark from edge to edge.
+  useEffect(() => {
+    document.body.classList.add('console-page')
+    return () => document.body.classList.remove('console-page')
+  }, [])
 
   return (
     <div className="console">
@@ -117,18 +132,20 @@ export function TraceScreen({ room }: { room: string }) {
             <p className="scene-title">{scene.title}</p>
             <InputsPanel net={net} t={t} x={scene.x} reference={scene.reference} />
             <ul className="context">{scene.context.map((c) => <li key={c}>{c}</li>)}</ul>
+            <p className="sub-head sens-head">p({decision?.label}) as each key input varies</p>
+            <SensitivityCurves net={net} t={t} sweeps={sweeps} />
           </Panel>
 
-          <Panel area="graph" title={view === 'graph' ? 'attribution graph' : 'network, 3d'}
+          <Panel area="graph" title={view === 'graph' ? 'attribution graph · full network' : 'network, 3d'}
             aside={
               <span className="tabs" role="group" aria-label="Graph view">
                 <button type="button" aria-pressed={view === 'graph'} onClick={() => setView('graph')}>
-                  circuit</button>
+                  graph</button>
                 <button type="button" aria-pressed={view === '3d'} onClick={() => setView('3d')}>3d</button>
               </span>
             }>
             {view === 'graph'
-              ? <CircuitGraph net={net} t={t} selected={selected} off={offSet} onSelect={setSelected} />
+              ? <NetworkGraph net={net} t={t} selected={selected} off={offSet} onSelect={setSelected} />
               : <Network3D net={net} trace={t} off={offSet} onToggle={toggle} />}
             <div className="graph-legend">
               <span className="k circuit">circuit: {t.circuit?.evidence.join(' + ') ?? 'none'}</span>
@@ -145,6 +162,18 @@ export function TraceScreen({ room }: { room: string }) {
 
           <Panel area="neuron" title={selected ? `neuron ${selected}` : 'neuron'}>
             <NeuronCard net={net} t={t} id={selected} off={offSet} onToggle={toggle} />
+            <p className="sub-head">logit attribution, last layer</p>
+            <LogitBars net={net} t={t} list={logits} onSelect={setSelected} />
+          </Panel>
+
+          <Panel area="ablate" title="ablation study"
+            aside={<span className="dim">each neuron off, alone</span>}>
+            <AblationTable net={net} rows={ablations} onSelect={setSelected} onToggle={toggle} off={offSet} />
+          </Panel>
+
+          <Panel area="raster" title="neuron activity"
+            aside={<span className="dim">{history[scenario].length} decisions · click to replay</span>}>
+            <Raster net={net} moments={history[scenario]} t={t} held={held?.at ?? null} onPick={pick} />
           </Panel>
 
           <Panel area="plots" title="telemetry">

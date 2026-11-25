@@ -16,6 +16,7 @@ export interface Moment {
   margin: number
   cause: string
   backup: string
+  acts?: number[] // every hidden neuron's activation, for the activity raster
 }
 
 export interface NeuronProfile {
@@ -101,92 +102,6 @@ export function InputsPanel({ net, t, x, reference }: {
         })}
       </tbody>
     </table>
-  )
-}
-
-// The circuit as an attribution graph: only the inputs and neurons the routes use, in layers,
-// edge width by attribution. Click a neuron to open its card.
-export function CircuitGraph({ net, t, selected, off, onSelect }: {
-  net: Net; t: Trace; selected: string | null; off: ReadonlySet<string>; onSelect: (id: string) => void
-}) {
-  const depth = net.layers.length
-  if (!t.circuit) {
-    return <p className="empty">No circuit: the network makes the same choice as for the reference input.
-      Nothing in this {net.name === 'driving' ? 'scene' : 'account'} changes its mind.</p>
-  }
-  const W = 900
-  const nodes = new Set([...t.circuit.nodes, ...(t.backup?.nodes ?? [])])
-  nodes.add(`y${t.choice}`)
-  const layers: string[][] = Array.from({ length: depth + 1 }, () => [])
-  for (const id of nodes) {
-    const layer = id.startsWith('x') ? 0 : id.startsWith('y') ? depth : Number(id.slice(1).split('_')[0])
-    layers[layer].push(id)
-  }
-  layers.forEach((l) => l.sort())
-  const rows = Math.max(...layers.map((l) => l.length), 2)
-  const H = Math.max(260, rows * 46 + 40)
-  const NW = 156 // node width
-  const colX = (layer: number) => NW / 2 + 12 + (layer / depth) * (W - NW - 24)
-  const pos = new Map<string, { x: number; y: number }>()
-  layers.forEach((l, layer) => l.forEach((id, k) => {
-    pos.set(id, { x: colX(layer), y: 30 + ((k + 0.5) * (H - 60)) / l.length })
-  }))
-  const circuit = new Set(t.circuit.edges)
-  const backup = new Set(t.backup?.edges ?? [])
-  const edges = [...new Set([...circuit, ...backup])]
-  const max = Math.max(1e-9, ...edges.map((e) => Math.abs(t.edgeAttr[e] ?? 0)))
-  const ends = (e: string) => {
-    const [l, i, j] = e.split(':').map(Number)
-    const a = l === 0 ? `x${i}` : `h${l}_${i}`
-    const b = l + 1 === depth ? `y${j}` : `h${l + 1}_${j}`
-    return [pos.get(a), pos.get(b)]
-  }
-  const name = (id: string) => {
-    if (id.startsWith('x')) return net.inputs[Number(id.slice(1))].id
-    if (id.startsWith('y')) return net.outputs[Number(id.slice(1))].label.toUpperCase()
-    return id
-  }
-  const act = (id: string) => {
-    if (id.startsWith('x')) return t.run.acts[0][Number(id.slice(1))]
-    if (id.startsWith('y')) return t.run.probs[Number(id.slice(1))]
-    const [l, j] = id.slice(1).split('_').map(Number)
-    return t.run.acts[l][j]
-  }
-  const sub = (id: string) => (id.startsWith('h')
-    ? (net.neurons.find((n) => n.id === id)?.label ?? '') : '')
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="graph" role="img"
-      aria-label={`Attribution graph: ${t.circuit.hidden.length} neurons carry the decision`}>
-      {['input', 'layer 1', 'layer 2', 'output'].slice(0, depth + 1).map((h, k) => (
-        <text key={h} x={colX(k)} y={14} className="col-head" textAnchor="middle">{h}</text>
-      ))}
-      {edges.map((e) => {
-        const [p, q] = ends(e)
-        if (!p || !q) return null
-        const inCircuit = circuit.has(e)
-        const wv = 1 + 5 * Math.abs(t.edgeAttr[e] ?? 0) / max
-        const mx = (p.x + q.x) / 2
-        return <path key={e} d={`M${p.x + NW / 2},${p.y} C${mx},${p.y} ${mx},${q.y} ${q.x - NW / 2},${q.y}`}
-          className={inCircuit ? 'edge circuit' : 'edge backup'} strokeWidth={wv} />
-      })}
-      {[...pos].map(([id, p]) => {
-        const isHidden = id.startsWith('h')
-        const role = t.circuit!.nodes.includes(id) ? 'circuit' : 'backup'
-        const v = act(id)
-        return (
-          <g key={id} transform={`translate(${p.x - NW / 2},${p.y - 17})`}
-            className={`node ${role}${selected === id ? ' selected' : ''}${off.has(id) ? ' off' : ''}${isHidden ? ' pick' : ''}`}
-            onClick={isHidden ? () => onSelect(id) : undefined} role={isHidden ? 'button' : undefined}
-            tabIndex={isHidden ? 0 : undefined}
-            onKeyDown={isHidden ? (ev) => { if (ev.key === 'Enter') onSelect(id) } : undefined}>
-            <rect width={NW} height={34} rx={3} />
-            <text x={6} y={14} className="n-id">{name(id).slice(0, 15)}</text>
-            <text x={NW - 6} y={14} className="n-val" textAnchor="end">{v.toFixed(2)}</text>
-            <text x={6} y={28} className="n-sub">{sub(id).slice(0, 28)}</text>
-          </g>
-        )
-      })}
-    </svg>
   )
 }
 
