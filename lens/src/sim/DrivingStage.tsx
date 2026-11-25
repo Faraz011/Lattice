@@ -40,6 +40,7 @@ export function DrivingStage({ net, route, off, send }: Props) {
   const [photo, setPhoto] = useState((Boolean(ION_TOKEN) || TRY_PHOTO) && !FORCE_OPEN)
   // A view that cannot load steps aside quietly for the next one; the reason goes to the
   // browser console for whoever is setting the demo up, never onto the stage.
+  const [photoWhy, setPhotoWhy] = useState<string | null>(null) // why the 3D city fell back
   const fellBack = (view: string, why: string) => console.warn(`${view} unavailable, falling back:`, why)
   const [camera, setCamera] = useState<Camera>('front')
   // Google Street View for the car's own cameras, when a key is configured.
@@ -140,10 +141,16 @@ export function DrivingStage({ net, route, off, send }: Props) {
           : photo
           ? <PhotoCity world={world} map={route} forced={forced} tick={physics.tick_s}
               physics={physics} camera={camera}
-              onFail={(why) => { fellBack('Photorealistic 3D city', why); setPhoto(false) }} />
+              onFail={(why) => { fellBack('Photorealistic 3D city', why); setPhotoWhy(why); setPhoto(false) }} />
           : <CityMap world={world} map={route} forced={forced} tick={physics.tick_s}
               physics={physics} camera={camera} />}
-        <span className="cam-label" aria-hidden="true">{CAMERA_NAMES[camera]}</span>
+        <span className="cam-label" aria-hidden="true">
+          {CAMERA_NAMES[camera]} · {street && camera !== 'chase' ? 'STREET VIEW' : photo ? '3D CITY' : 'MAP'}
+        </span>
+        {!photo && Boolean(ION_TOKEN) && !FORCE_OPEN && (
+          <button type="button" className="retry-3d" title={photoWhy ?? 'The 3D city is off'}
+            onClick={() => { setPhotoWhy(null); setPhoto(true) }}>Load 3D city</button>
+        )}
         <div className="cams" role="group" aria-label="Camera">
           {(['front', 'rear', 'chase'] as Camera[]).map((c) => (
             <button key={c} type="button" aria-pressed={camera === c} onClick={() => setCamera(c)}>
