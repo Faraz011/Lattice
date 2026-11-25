@@ -262,3 +262,13 @@ button.quiet { border-color: transparent; text-decoration: underline; }
 .cams button[aria-pressed='true'] { background: #f6f8f3; color: var(--ink); }
 .cam-label { position: absolute; top: 0.85rem; left: 0.9rem; z-index: 3; font: 700 11px var(--sans); letter-spacing: 0.04em;
   color: #fff; background: rgba(163,35,58,0.85); padding: 0.15rem 0.45rem; border-radius: 3px; }
+
+/* ---- Street View ---- */
+.city-map.street { background: #2a2f3a; }
+.city-map.street canvas { display: block; width: 100%; height: 100%; }
+.street-credit { position: absolute; right: 0.5rem; bottom: 0.35rem; z-index: 3; font-size: 0.6875rem; color: #fff;
+  text-shadow: 0 1px 2px #000; margin: 0; }
+.street-credit strong { font-weight: 700; letter-spacing: 0.01em; }
+.sim-markers .det { border-style: dashed; background: rgba(120, 220, 255, 0.08); }
+.sim-markers .det.used { border-style: solid; background: rgba(255, 255, 255, 0.1); }
+.sim-markers .det span::before { content: 'sim · '; opacity: 0.75; }

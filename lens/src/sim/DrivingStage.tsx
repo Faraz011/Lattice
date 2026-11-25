@@ -6,6 +6,8 @@ import type { Message } from '../link'
 import type { Net } from '../model/net'
 import { CityMap } from './CityMap'
 import { FORCE_OPEN, ION_TOKEN, PhotoCity, TRY_PHOTO, type Camera } from './PhotoCity'
+import { StreetCam } from './StreetCam'
+import { STREET_KEY } from './streetview'
 import {
   ACTIONS, cutIn, describe, features, nextLight, reference, rel, step, stepOut, worldFromMap,
   type Colour, type Physics, type RouteMap, type World,
@@ -38,6 +40,8 @@ export function DrivingStage({ net, route, off, send }: Props) {
   const [photo, setPhoto] = useState((Boolean(ION_TOKEN) || TRY_PHOTO) && !FORCE_OPEN)
   const [photoNote, setPhotoNote] = useState<string | null>(null)
   const [camera, setCamera] = useState<Camera>('front')
+  // Google Street View for the car's own cameras, when a key is configured.
+  const [street, setStreet] = useState(Boolean(STREET_KEY) && !FORCE_OPEN)
   // Pause at a moment worth explaining: once braking is steady, or once the car has stopped.
   const [armed, setArmed] = useState<'brake' | 'stop' | null>(null)
   const braking = useRef(0) // consecutive ticks of braking
@@ -127,7 +131,11 @@ export function DrivingStage({ net, route, off, send }: Props) {
   return (
     <div className="sim">
       <div className="stage city">
-        {photo
+        {street && camera !== 'chase'
+          ? <StreetCam world={world} map={route} forced={forced} tick={physics.tick_s}
+              physics={physics} rear={camera === 'rear'}
+              onFail={(why) => { setPhotoNote(`Street View: ${why}`); setStreet(false) }} />
+          : photo
           ? <PhotoCity world={world} map={route} forced={forced} tick={physics.tick_s}
               physics={physics} camera={camera}
               onFail={(why) => { setPhotoNote(why); setPhoto(false) }} />

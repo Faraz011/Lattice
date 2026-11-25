@@ -14,6 +14,10 @@ COPY lens/ ./
 # Without it the car drives on the open map.
 ARG VITE_CESIUM_ION_TOKEN=""
 ENV VITE_CESIUM_ION_TOKEN=$VITE_CESIUM_ION_TOKEN
+# The Google Maps key for Street View from the car's cameras (Map Tiles API). Without it the
+# cameras show the 3D city.
+ARG VITE_GOOGLE_MAPS_KEY=""
+ENV VITE_GOOGLE_MAPS_KEY=$VITE_GOOGLE_MAPS_KEY
 RUN npm run build
 
 FROM python:3.11-slim

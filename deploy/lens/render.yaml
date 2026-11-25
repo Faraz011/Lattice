@@ -16,3 +16,7 @@ services:
       # Tokens). Set it in the Render dashboard; without it the car drives on the open map.
       - key: VITE_CESIUM_ION_TOKEN
         sync: false
+      # Google Maps key with the Map Tiles API enabled, restricted to this site's address: the
+      # car's cameras show Google Street View. Without it they show the 3D city.
+      - key: VITE_GOOGLE_MAPS_KEY
+        sync: false
