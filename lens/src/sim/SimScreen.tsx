@@ -34,7 +34,7 @@ export function SimScreen({ room }: { room: string }) {
       {error && <p className="banner" role="alert">{error}</p>}
       {!models && !error && <p className="waiting">Loading the networks.</p>}
       {models && scenario === 'driving' && (
-        <DrivingStage net={models.driving} off={off.driving} send={send} />
+        <DrivingStage net={models.driving} route={models.london} off={off.driving} send={send} />
       )}
       {models && scenario === 'aml' && (
         <BankStage net={models.aml} episode={models.episode} off={off.aml} send={send} />

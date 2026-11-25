@@ -10,8 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "maplibre-gl": "^5.24.1",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "three": "^0.178.0"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.2",
@@ -21,6 +23,7 @@
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
+    "@types/three": "^0.178.1",
     "@vitejs/plugin-react": "^6.1.1",
     "jsdom": "^26.1.0",
     "typescript": "~6.0.2",

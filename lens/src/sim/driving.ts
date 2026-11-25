@@ -1,6 +1,8 @@
-// The self-driving car's world: a straight road with traffic lights, crosswalks and other cars.
-// Positions are metres along the road. Each tick the car reads the 13 numbers its network was
-// trained on (src/lattice/lens/driving.py, INPUTS, same order and meaning) and acts.
+// The self-driving car's world: a road with traffic lights, crosswalks and other cars. Positions
+// are metres along the road; on a real route (lens/public/maps, from OpenStreetMap) the road is
+// a loop and every distance is measured ahead of the car around it. Each tick the car reads the
+// 13 numbers its network was trained on (src/lattice/lens/driving.py, INPUTS, same order and
+// meaning) and acts.
 import { forward, type Ablation, type Net } from '../model/net'
 
 export interface Physics {
@@ -21,6 +23,8 @@ export type Incident = { kind: 'red_light' | 'pedestrian' | 'collision'; at: num
 
 export interface World {
   time: number
+  length: number | null // a looping route's length; null for an endless straight road
+  odometer: number // metres driven
   car: { at: number; speed: number }
   lights: Light[]
   crosswalks: number[]
@@ -58,9 +62,45 @@ export function newWorld(seed = 1): World {
     if (rand() < 0.6) crosswalks.push(at + 100 + rand() * 60) // and some mid-block ones
   }
   crosswalks.sort((a, b) => a - b)
-  return { time: 0, car: { at: 0, speed: 8 }, lights, crosswalks, pedestrians: [], lead: null,
-    rain: false, night: false, action: 1, probs: [0, 1, 0], seen: null, incidents: [],
-    nextId: 1 }
+  return blank(lights, crosswalks, null)
+}
+
+// A real route: its signalled junctions and crossings, as metres along it.
+export interface RouteMap {
+  name: string
+  source: string
+  length_m: number
+  route: [number, number][]
+  cumulative_m: number[]
+  signals: { at: number; lng: number; lat: number }[]
+  crossings: { at: number; lng: number; lat: number; kind: string }[]
+}
+
+export function worldFromMap(map: RouteMap, seed = 1): World {
+  const rand = mulberry(seed)
+  const lights = map.signals.map((sig) => ({ at: sig.at, offset: rand() * PERIOD }))
+  // Several crossing nodes on one crossing (each half of a divided road): keep one per 12 m.
+  const crosswalks: number[] = []
+  for (const c of map.crossings) {
+    if (!crosswalks.length || c.at - crosswalks[crosswalks.length - 1] > 12) crosswalks.push(c.at)
+  }
+  return blank(lights, crosswalks, map.length_m)
+}
+
+function blank(lights: Light[], crosswalks: number[], length: number | null): World {
+  return { time: 0, length, odometer: 0, car: { at: 0, speed: 8 }, lights, crosswalks,
+    pedestrians: [], lead: null, rain: false, night: false, action: 1, probs: [0, 1, 0],
+    seen: null, incidents: [], nextId: 1 }
+}
+
+// How far `at` is ahead of the car: negative behind it. Around a loop, the nearer way round.
+export function rel(w: World, at: number): number {
+  let d = at - w.car.at
+  if (w.length) {
+    d = ((d % w.length) + w.length) % w.length
+    if (d > w.length / 2) d -= w.length
+  }
+  return d
 }
 
 function mulberry(seed: number) {
@@ -73,14 +113,21 @@ function mulberry(seed: number) {
   }
 }
 
-const ahead = (w: World, at: number, view: number) => at > w.car.at && at - w.car.at <= view
+const ahead = (w: World, at: number, view: number) => rel(w, at) > 0 && rel(w, at) <= view
+const nearest = <T>(w: World, items: T[], at: (t: T) => number, view: number): T | null => {
+  let best: T | null = null
+  for (const t of items) {
+    if (ahead(w, at(t), view) && (best === null || rel(w, at(t)) < rel(w, at(best)))) best = t
+  }
+  return best
+}
 
 export function nextLight(w: World, p: Physics): Light | null {
-  return w.lights.find((l) => ahead(w, l.at, p.view_m)) ?? null
+  return nearest(w, w.lights, (l) => l.at, p.view_m)
 }
 
 export function nextCrosswalk(w: World, p: Physics): number | null {
-  return w.crosswalks.find((c) => ahead(w, c, p.view_m)) ?? null
+  return nearest(w, w.crosswalks, (c) => c, p.view_m)
 }
 
 export const onCrosswalk = (ped: Pedestrian) => ped.wait <= 0 && ped.x >= 0 && ped.x <= ROAD_WIDTH
@@ -99,12 +146,12 @@ export function features(w: World, p: Physics, forced?: Map<number, Colour>): nu
     colour === 'red' ? 1 : 0,
     colour === 'yellow' ? 1 : 0,
     colour === 'green' ? 1 : 0,
-    light ? near(light.at - w.car.at) : 0,
+    light ? near(rel(w, light.at)) : 0,
     peds.some(onCrosswalk) ? 1 : 0,
     peds.some(atCurb) ? 1 : 0,
-    cw === null ? 0 : near(cw - w.car.at),
+    cw === null ? 0 : near(rel(w, cw)),
     lead ? 1 : 0,
-    lead ? near(lead.at - w.car.at) : 0,
+    lead ? near(rel(w, lead.at)) : 0,
     lead ? Math.min(1, Math.max(0, (w.car.speed - lead.speed) / p.vmax_ms)) : 0,
     w.rain ? 1 : 0,
     w.night ? 1 : 0,
@@ -119,23 +166,23 @@ export function reference(x: number[]): number[] {
 export function describe(w: World, p: Physics, forced?: Map<number, Colour>): string[] {
   const out = [`${Math.round(w.car.speed * 3.6)} km/h${w.rain ? ', wet road' : ''}${w.night ? ', night' : ''}`]
   const light = nextLight(w, p)
-  if (light) out.push(`${colourAt(light, w.time, forced)} light in ${Math.round(light.at - w.car.at)} m`)
+  if (light) out.push(`${colourAt(light, w.time, forced)} light in ${Math.round(rel(w, light.at))} m`)
   const cw = nextCrosswalk(w, p)
   if (cw !== null) {
     const peds = w.pedestrians.filter((x) => x.crosswalk === cw)
     const who = peds.some(onCrosswalk) ? ', someone crossing' : peds.some(atCurb)
       ? ', someone waiting' : ''
-    out.push(`crosswalk in ${Math.round(cw - w.car.at)} m${who}`)
+    out.push(`crosswalk in ${Math.round(rel(w, cw))} m${who}`)
   }
   if (w.lead && ahead(w, w.lead.at, p.view_m)) {
-    out.push(`car ahead at ${Math.round(w.lead.at - w.car.at)} m, ${Math.round(w.lead.speed * 3.6)} km/h`)
+    out.push(`car ahead at ${Math.round(rel(w, w.lead.at))} m, ${Math.round(w.lead.speed * 3.6)} km/h`)
   }
   return out
 }
 
 // Scripted events the presenter triggers from the simulation screen.
 export function stepOut(w: World, p: Physics): void {
-  const cw = w.crosswalks.find((c) => c - w.car.at > 25 && c - w.car.at < p.view_m)
+  const cw = w.crosswalks.find((c) => rel(w, c) > 25 && rel(w, c) < p.view_m)
   if (cw === undefined) return
   w.pedestrians.push({ id: w.nextId++, crosswalk: cw, x: -0.5, speed: 1.3, wait: 0.6 })
 }
@@ -154,19 +201,25 @@ export function step(w: World, p: Physics, net: Net, ablation: Ablation,
   w.seen = x
   const accel = run.choice === 0 ? p.accel_ms2 : run.choice === 2 ? -p.brake_ms2 * (w.rain ? 0.7 : 1)
     : -p.drag_ms2
-  const before = w.car.at
   w.car.speed = Math.min(p.vmax_ms, Math.max(0, w.car.speed + accel * dt))
-  w.car.at += w.car.speed * dt
+  const moved = w.car.speed * dt
+  // Passed during this tick: ahead of the car by no more than it moved.
+  const passes = (at: number) => { const d = rel(w, at); return d > 0 && d <= moved }
+  const passedLights = w.lights.filter((l) => passes(l.at))
+  const passedPeds = w.pedestrians.filter((ped) => passes(ped.crosswalk))
+  w.car.at += moved
+  if (w.length) w.car.at %= w.length
+  w.odometer += moved
   w.time += dt
 
   // What happened, judged against the world, not the network.
-  for (const l of w.lights) {
-    if (before < l.at && w.car.at >= l.at && colourAt(l, w.time, forced) === 'red') {
+  for (const l of passedLights) {
+    if (colourAt(l, w.time, forced) === 'red') {
       w.incidents.push({ kind: 'red_light', at: l.at, time: w.time })
     }
   }
-  for (const ped of w.pedestrians) {
-    if (before < ped.crosswalk && w.car.at >= ped.crosswalk && onCrosswalk(ped)) {
+  for (const ped of passedPeds) {
+    if (onCrosswalk(ped)) {
       w.incidents.push({ kind: 'pedestrian', at: ped.crosswalk, time: w.time })
       ped.x = ROAD_WIDTH + 1 // they jump clear; the incident is what counts
     }
@@ -176,7 +229,7 @@ export function step(w: World, p: Physics, net: Net, ablation: Ablation,
     if (ped.wait > 0) ped.wait -= dt
     else ped.x += ped.speed * dt
   }
-  w.pedestrians = w.pedestrians.filter((ped) => ped.x < ROAD_WIDTH + 2 && ped.crosswalk > w.car.at - 30)
+  w.pedestrians = w.pedestrians.filter((ped) => ped.x < ROAD_WIDTH + 2 && rel(w, ped.crosswalk) > -30)
   // Now and then someone comes to a crosswalk ahead on their own.
   if (rand() < dt * 0.05) stepOut(w, p)
 
@@ -185,11 +238,12 @@ export function step(w: World, p: Physics, net: Net, ablation: Ablation,
     if (l.target < 12 && Math.abs(l.speed - l.target) < 0.2 && rand() < dt * 0.15) l.target = 14
     l.speed += Math.sign(l.target - l.speed) * Math.min(Math.abs(l.target - l.speed), 1.5 * dt)
     l.at += l.speed * dt
-    if (l.at - w.car.at < 3 && w.car.speed > l.speed) {
+    if (w.length) l.at %= w.length
+    if (rel(w, l.at) < 3 && w.car.speed > l.speed) {
       w.incidents.push({ kind: 'collision', at: l.at, time: w.time })
       w.car.speed = l.speed
     }
-    if (l.at - w.car.at > p.view_m * 1.4) w.lead = null
+    if (rel(w, l.at) > p.view_m * 1.4) w.lead = null
   }
   return x
 }

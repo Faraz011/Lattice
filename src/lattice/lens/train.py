@@ -8,6 +8,7 @@ writes `lens/public/models/driving.json`, `lens/public/models/aml.json` and
 
 import argparse
 import json
+import math
 import random
 import sys
 from datetime import datetime
@@ -115,14 +116,35 @@ def episode() -> dict:
     return {
         "title": "A small bank, two weeks",
         "start": start.isoformat(), "end": end.isoformat(),
-        "accounts": [{"id": a, "kind": by_id[a].kind,
-                      "owner": customers[by_id[a].customer_id].name} for a in sorted(accounts)],
+        "accounts": [_place(a, by_id[a].kind, customers[by_id[a].customer_id].name,
+                            by_id[a].country) for a in sorted(accounts)],
         "shared_devices": shared,
         "steps": steps,
         # The answer key, for the presenter only: the network never sees it.
         "cases": [{"kind": c.kind, "category": c.category, "accounts": c.account_ids,
                    "seed": c.seed_account_id} for c in cases],
     }
+
+
+# Each country's banking city, and its currency. Accounts are scattered around their city.
+CITIES = {
+    "GB": ("London", -0.1276, 51.5072, "GBP"), "DE": ("Frankfurt", 8.6821, 50.1109, "EUR"),
+    "FR": ("Paris", 2.3522, 48.8566, "EUR"), "NL": ("Amsterdam", 4.9041, 52.3676, "EUR"),
+    "ES": ("Madrid", -3.7038, 40.4168, "EUR"), "IT": ("Milan", 9.19, 45.4642, "EUR"),
+    "PL": ("Warsaw", 21.0122, 52.2297, "PLN"), "IE": ("Dublin", -6.2603, 53.3498, "EUR"),
+    "PT": ("Lisbon", -9.1393, 38.7223, "EUR"), "SE": ("Stockholm", 18.0686, 59.3293, "SEK"),
+}
+
+
+def _place(account: str, kind: str, owner: str, country: str) -> dict:
+    """An account's home: its country's city, a spot near it, a masked IBAN-style number."""
+    city, lng, lat, currency = CITIES.get(country, CITIES["GB"])
+    rng = random.Random(account)
+    angle, radius = rng.uniform(0, 6.283), rng.uniform(0.004, 0.05)  # about 0.5 to 5 km
+    return {"id": account, "kind": kind, "owner": owner, "country": country, "city": city,
+            "currency": currency, "iban": f"{country}{rng.randint(10, 99)} •••• {account[-4:].upper()}",
+            "lng": round(lng + radius * 1.6 * math.cos(angle), 5),
+            "lat": round(lat + radius * math.sin(angle), 5)}
 
 
 def _write(path: Path, data: dict) -> None:

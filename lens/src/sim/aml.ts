@@ -4,7 +4,31 @@
 // is laundering, and a frozen account's later transfers are blocked.
 import { forward, type Ablation, type Net } from '../model/net'
 
-export interface EpisodeAccount { id: string; kind: string; owner: string }
+export interface EpisodeAccount {
+  id: string
+  kind: string
+  owner: string
+  country: string
+  city: string
+  currency: string
+  iban: string
+  lng: number
+  lat: number
+}
+
+// How a bank would name the transfer's method.
+export function method(channel: string, from?: EpisodeAccount, to?: EpisodeAccount): string {
+  if (channel === 'wire') {
+    if (from && to && from.country !== to.country) return 'SWIFT wire'
+    return from?.country === 'GB' ? 'Faster Payments' : 'SEPA transfer'
+  }
+  return ({ card: 'Card payment', cash_deposit: 'Cash deposit', p2p: 'P2P app',
+    crypto: 'Crypto exchange' } as Record<string, string>)[channel] ?? channel
+}
+
+export function money(amount: number, currency = 'EUR'): string {
+  return amount.toLocaleString('en-GB', { style: 'currency', currency, maximumFractionDigits: 0 })
+}
 export interface EpisodeStep {
   t: string
   tx: { id: string; src: string; dst: string; amount: number; channel: string }

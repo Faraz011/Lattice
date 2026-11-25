@@ -1,12 +1,16 @@
 // Device 2: inside the network that makes the decision on device 1, traced live.
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { TopBar } from '../TopBar'
 import { useLink, type Message, type Scenario, type SceneMessage } from '../link'
 import type { Net } from '../model/net'
 import { trace as traceDecision, type Route, type Trace } from '../model/trace'
 import { useModels } from '../model/useModels'
+import { drivers, Drivers, sentence, Timeline, WhatIf, type Moment } from './Analytics'
+import { Network3D } from './Network3D'
 import { NetworkDiagram } from './NetworkDiagram'
+
+const HISTORY = 120 // decisions kept for the confidence timeline
 
 const AGAINST: Record<Scenario, string> = {
   driving: 'the same moment on an empty road',
@@ -20,6 +24,8 @@ export function TraceScreen({ room }: { room: string }) {
   const [scenes, setScenes] = useState<Partial<Record<Scenario, SceneMessage>>>({})
   const [held, setHeld] = useState<SceneMessage | null>(null)
   const [off, setOff] = useState<Record<Scenario, string[]>>({ driving: [], aml: [] })
+  const [view, setView] = useState<'3d' | 'flat'>(() => (hasWebGL() ? '3d' : 'flat'))
+  const [history, setHistory] = useState<Record<Scenario, Moment[]>>({ driving: [], aml: [] })
 
   const onMessage = useCallback((m: Message) => {
     if (m.type === 'scenario') setScenario(m.scenario)
@@ -34,6 +40,16 @@ export function TraceScreen({ room }: { room: string }) {
   const offSet = useMemo(() => new Set(off[scenario]), [off, scenario])
   const t: Trace | null = useMemo(() => (net && scene
     ? traceDecision(net, scene.x, scene.reference, { nodes: offSet }) : null), [net, scene, offSet])
+
+  const found = useMemo(() => (net && scene && t
+    ? drivers(net, scene.x, scene.reference, { nodes: offSet }) : []), [net, scene, t, offSet])
+
+  // Each new decision joins the timeline (not while a moment is held).
+  useEffect(() => {
+    if (!t || held || !scene) return
+    setHistory((h) => ({ ...h, [scenario]: [...h[scenario], { at: scene.at, probs: t.run.probs,
+      choice: t.choice }].slice(-HISTORY) }))
+  }, [t, held, scene, scenario])
 
   const setNodes = (nodes: string[]) => {
     setOff((o) => ({ ...o, [scenario]: nodes }))
@@ -61,15 +77,22 @@ export function TraceScreen({ room }: { room: string }) {
         </div>
       ) : (
         <div className="trace">
-          <main className="trace-main">
-            <div className="verdict-line">
-              <span className="word">{scene.title}: {net.outputs[t.choice].label}</span>
-              <span className="muted">{Math.round(t.run.probs[t.choice] * 100)}% over{' '}
-                {net.outputs[t.runnerUp].label}</span>
-              <span className="against">{held ? 'Held. ' : 'Live. '}Compared with {AGAINST[scenario]}.</span>
+          <header className="headline">
+            <Gauge p={t.run.probs[t.choice]} />
+            <div>
+              <p className="decided">{scene.title}: <strong>{net.outputs[t.choice].label}</strong></p>
+              <p className="said">{sentence(net, t, AGAINST[scenario])}</p>
+              <p className="muted">{held ? 'Held moment. ' : 'Live. '}{scene.context.join(' · ')}</p>
             </div>
-            <ul className="facts muted">{scene.context.map((c) => <li key={c}>{c}</li>)}</ul>
-            <NetworkDiagram net={net} trace={t} off={offSet} onToggle={toggle} />
+          </header>
+          <main className="trace-main">
+            <div className="view-switch" role="group" aria-label="Network view">
+              <button type="button" aria-pressed={view === '3d'} onClick={() => setView('3d')}>3D</button>
+              <button type="button" aria-pressed={view === 'flat'} onClick={() => setView('flat')}>Flat</button>
+            </div>
+            {view === '3d'
+              ? <Network3D net={net} trace={t} off={offSet} onToggle={toggle} />
+              : <NetworkDiagram net={net} trace={t} off={offSet} onToggle={toggle} />}
             <p className="legend">
               <span>The circuit: the fewest neurons that make this decision</span>
               <span className="k-backup">The backup route, if the circuit is switched off</span>
@@ -78,12 +101,47 @@ export function TraceScreen({ room }: { room: string }) {
             </p>
           </main>
           <aside className="explain">
+            <section>
+              <h3>What drove this decision</h3>
+              <Drivers net={net} list={found} choice={t.choice} />
+            </section>
+            <section>
+              <h3>How sure it has been</h3>
+              <Timeline net={net} moments={history[scenario]} />
+            </section>
+            <section>
+              <h3>What would change its mind</h3>
+              <WhatIf key={`${scenario}-${scene.at}`} net={net} x={scene.x} t={t}
+                base={{ nodes: offSet }} />
+            </section>
             <Explanation net={net} t={t} scenario={scenario} off={offSet} setNodes={setNodes} />
           </aside>
         </div>
       )}
     </>
   )
+}
+
+// How sure it is, as a ring.
+function Gauge({ p }: { p: number }) {
+  const r = 26
+  const c = 2 * Math.PI * r
+  return (
+    <svg className="gauge" viewBox="0 0 64 64" role="img" aria-label={`${Math.round(p * 100)}% sure`}>
+      <circle cx="32" cy="32" r={r} fill="none" stroke="#dee6dc" strokeWidth="7" />
+      <circle cx="32" cy="32" r={r} fill="none" stroke="#a3233a" strokeWidth="7"
+        strokeDasharray={`${c * p} ${c}`} transform="rotate(-90 32 32)" strokeLinecap="round" />
+      <text x="32" y="37" textAnchor="middle" className="gauge-num">{Math.round(p * 100)}%</text>
+    </svg>
+  )
+}
+
+function hasWebGL(): boolean {
+  try {
+    return !!document.createElement('canvas').getContext('webgl2')
+  } catch {
+    return false
+  }
 }
 
 function Explanation({ net, t, scenario, off, setNodes }: {

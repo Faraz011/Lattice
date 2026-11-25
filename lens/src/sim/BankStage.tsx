@@ -1,17 +1,17 @@
-// Two weeks of a small bank, transfer by transfer. Accounts take the colour of the network's
-// verdict; the agent freezes one once the verdict is confident; a frozen account's transfers are
-// blocked. Click an account to trace its decision on the other device.
+// Two weeks of a European bank, transfer by transfer, on a map of its customers' cities with a
+// live ledger beneath. Accounts take the colour of the network's verdict; the agent freezes one
+// once the verdict is confident; a frozen account's transfers are blocked. Click an account, on
+// the map or in the ledger, to trace its decision on the other device.
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { Message } from '../link'
 import type { Net } from '../model/net'
 import {
-  advance, describeAccount, FREEZE_AT, newBank, rejudge, shortId, type Bank, type Episode,
+  advance, describeAccount, FREEZE_AT, method, money, newBank, rejudge, shortId, type Bank,
+  type Episode,
 } from './aml'
-import { layout } from './layout'
+import { BankMap } from './BankMap'
 
-const W = 1000
-const H = 680
 const SPEEDS = [{ label: '1x', ms: 1400 }, { label: '3x', ms: 450 }]
 
 interface Props {
@@ -23,15 +23,13 @@ interface Props {
 
 export function BankStage({ net, episode, off, send }: Props) {
   const bank = useRef<Bank>(newBank())
-  const [, setTick] = useState(0)
+  const [tick, setTick] = useState(0)
   const [playing, setPlaying] = useState(true)
   const [speed, setSpeed] = useState(0)
   const [showKey, setShowKey] = useState(false)
   const ablation = useMemo(() => ({ nodes: new Set(off) }), [off])
   const refresh = () => setTick((t) => t + 1)
 
-  const pos = useMemo(() => layout(episode.accounts.map((a) => a.id),
-    episode.steps.map((s) => [s.tx.src, s.tx.dst] as [string, string]), W, H), [episode])
   const owners = useMemo(() => new Map(episode.accounts.map((a) => [a.id, a])), [episode])
   const planted = useMemo(() => new Map(episode.cases.flatMap((c) =>
     c.accounts.map((a) => [a, c] as const))), [episode])
@@ -65,86 +63,16 @@ export function BankStage({ net, episode, off, send }: Props) {
       context: describeAccount(b, episode, net, focus), at: Date.now() })
   })
 
-  const shown = episode.steps.slice(0, b.step)
   const current = b.step > 0 ? episode.steps[b.step - 1] : null
   const when = current ? new Date(current.t) : new Date(episode.start)
 
   return (
     <div className="sim">
       <div className="stage bank">
-        <svg viewBox={`0 0 ${W} ${H}`} className="diagram" role="img"
-          aria-label={`Accounts and transfers, ${b.step} of ${episode.steps.length} played`}>
-          <defs>
-            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5"
-              orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4b5670" /></marker>
-          </defs>
-          {Object.entries(episode.shared_devices).flatMap(([a, others]) => others.filter((o) => o > a)
-            .map((o) => {
-              const p = pos.get(a)!, q = pos.get(o)!
-              return <line key={`d-${a}-${o}`} x1={p.x} y1={p.y} x2={q.x} y2={q.y} stroke="#85661c"
-                strokeWidth={1} strokeDasharray="2 4" opacity={0.6} />
-            }))}
-          {shown.map((s, i) => {
-            const p = pos.get(s.tx.src)!, q = pos.get(s.tx.dst)!
-            const recent = b.step - i <= 6
-            const blocked = b.blocked.has(s.tx.id)
-            return <line key={s.tx.id} x1={p.x} y1={p.y} x2={q.x} y2={q.y}
-              stroke={blocked ? '#a3233a' : '#4b5670'} strokeWidth={recent ? 2 : 1}
-              strokeDasharray={blocked ? '6 4' : undefined}
-              opacity={recent ? 0.9 : 0.25} markerEnd={recent ? 'url(#arrow)' : undefined} />
-          })}
-          {current && (() => {
-            const p = pos.get(current.tx.src)!, q = pos.get(current.tx.dst)!
-            const blocked = b.blocked.has(current.tx.id)
-            return (
-              <g key={`move-${b.step}`}>
-                <circle r={7} fill={blocked ? '#a3233a' : '#85661c'}>
-                  <animateMotion dur="0.8s" fill="freeze" path={`M${p.x},${p.y} L${q.x},${q.y}`} />
-                </circle>
-                <text x={(p.x + q.x) / 2 + 8} y={(p.y + q.y) / 2 - 8} className="label">
-                  {blocked ? 'blocked: account frozen' : money(current.tx.amount)}</text>
-              </g>
-            )
-          })()}
-          <g aria-hidden="true">
-            <circle cx={24} cy={H - 66} r={6} fill="#a3233a" stroke="#1e2942" strokeWidth={1.5} />
-            <text x={36} y={H - 62} className="label">flagged by the check</text>
-            <rect x={18} y={H - 48} width={12} height={12} rx={2} fill="#a3233a" />
-            <text x={36} y={H - 38} className="label">frozen by the agent</text>
-            <circle cx={24} cy={H - 18} r={8} fill="none" stroke="#85661c" strokeWidth={3} />
-            <text x={36} y={H - 14} className="label">traced on the other device</text>
-          </g>
-          {episode.accounts.map((a) => {
-            const p = pos.get(a.id)!
-            const v = b.verdicts.get(a.id)
-            const flagged = v && v.choice !== 0
-            const frozen = b.frozen.has(a.id)
-            const isFocus = a.id === focus
-            const key = showKey ? planted.get(a.id) : undefined
-            return (
-              <g key={a.id} className="neuron" tabIndex={0} role="button"
-                aria-label={`${shortId(a.id)}, ${a.owner}${flagged ? `, flagged ${net.outputs[v!.choice].label}` : ''}${frozen ? ', frozen' : ''}`}
-                onClick={() => { b.focus = a.id; refresh() }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { b.focus = a.id; refresh() } }}>
-                {key && <circle cx={p.x} cy={p.y} r={16} fill="none"
-                  stroke={key.category === 'planted' ? '#a3233a' : '#2f6b4f'} strokeDasharray="3 3" />}
-                {isFocus && <circle cx={p.x} cy={p.y} r={13} fill="none" stroke="#85661c" strokeWidth={3} />}
-                {frozen
-                  ? <rect x={p.x - 8} y={p.y - 8} width={16} height={16} rx={3} fill="#a3233a" />
-                  : <circle cx={p.x} cy={p.y} r={a.kind === 'person' ? 6 : 8}
-                    fill={flagged ? '#a3233a' : a.kind === 'person' ? '#f6f8f3' : '#dee6dc'}
-                    stroke="#1e2942" strokeWidth={1.5} opacity={flagged ? Math.max(0.5, v!.confidence) : 1} />}
-                {(isFocus || a.kind !== 'person') && (
-                  <text x={p.x + 14} y={p.y + 4} className={isFocus ? 'label' : 'label soft'}
-                    style={{ fontWeight: isFocus ? 700 : 400 }}>
-                    {a.kind !== 'person' ? a.owner : shortId(a.id)}
-                    {isFocus && flagged ? `: ${net.outputs[v!.choice].label}` : ''}
-                  </text>
-                )}
-              </g>
-            )
-          })}
-        </svg>
+        <BankMap bank={b} episode={episode} version={tick} answerKey={showKey ? planted : null}
+          onFocus={(a) => { b.focus = a; refresh() }} />
+        <Ledger bank={b} episode={episode} net={net}
+          onFocus={(a) => { b.focus = a; refresh() }} />
       </div>
       <aside className="side">
         <section>
@@ -202,5 +130,55 @@ export function BankStage({ net, episode, off, send }: Props) {
   )
 }
 
-const money = (n: number) => n.toLocaleString(undefined, { style: 'currency', currency: 'USD',
-  maximumFractionDigits: 0 })
+// The live ledger: the newest transfers first, as a bank's operations screen would list them.
+function Ledger({ bank, episode, net, onFocus }: {
+  bank: Bank; episode: Episode; net: Net; onFocus: (a: string) => void
+}) {
+  const accounts = new Map(episode.accounts.map((a) => [a.id, a]))
+  const rows = episode.steps.slice(Math.max(0, bank.step - 9), bank.step).reverse()
+  const party = (id: string) => {
+    const a = accounts.get(id)
+    const v = bank.verdicts.get(id)
+    const flagged = v && v.choice !== 0
+    return (
+      <button type="button" className={`party${flagged ? ' flagged' : ''}${bank.frozen.has(id) ? ' frozen' : ''}`}
+        onClick={() => onFocus(id)} title={`Trace ${a?.owner ?? id} on the other device`}>
+        <strong>{a?.owner ?? shortId(id)}</strong>
+        <span>{a?.city} · {a?.iban}</span>
+      </button>
+    )
+  }
+  return (
+    <div className="ledger" role="region" aria-label="Transactions, newest first">
+      <table>
+        <thead>
+          <tr><th>Time</th><th>From</th><th>To</th><th className="num">Amount</th><th>Method</th>
+            <th>Status</th></tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && <tr><td colSpan={6} className="muted">Press Play to open the bank.</td></tr>}
+          {rows.map((s) => {
+            const from = accounts.get(s.tx.src)
+            const to = accounts.get(s.tx.dst)
+            const blocked = bank.blocked.has(s.tx.id)
+            const review = [s.tx.src, s.tx.dst].some((a) => (bank.verdicts.get(a)?.choice ?? 0) !== 0)
+            const verdict = [s.tx.src, s.tx.dst].map((a) => bank.verdicts.get(a))
+              .find((v) => v && v.choice !== 0)
+            return (
+              <tr key={s.tx.id} className={blocked ? 'blocked' : review ? 'review' : undefined}>
+                <td>{new Date(s.t).toLocaleString('en-GB', { weekday: 'short', hour: '2-digit',
+                  minute: '2-digit' })}</td>
+                <td>{party(s.tx.src)}</td>
+                <td>{party(s.tx.dst)}</td>
+                <td className="num">{money(s.tx.amount, from?.currency)}</td>
+                <td>{method(s.tx.channel, from, to)}</td>
+                <td><span className="status">{blocked ? 'Blocked: sender frozen' : review
+                  ? `Under review: ${net.outputs[verdict!.choice].label}` : 'Cleared'}</span></td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
