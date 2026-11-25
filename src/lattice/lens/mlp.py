@@ -173,6 +173,40 @@ def label_neurons(net: MLP, x: np.ndarray, inputs: list[Feature], outputs: list[
     return out
 
 
+def neuron_profiles(net: MLP, x: np.ndarray, describe, top: int = 6, bins: int = 16) -> dict:
+    """What each hidden neuron fires for, the way interpretability tools show a feature: the
+    training situations that excite it most, in words, and a histogram of its activations.
+
+    `describe` turns one input row into a short description. Situations with the same
+    description are shown once, at their strongest.
+    """
+    acts = net.forward(x)
+    out = {}
+    for layer in range(1, len(net.sizes) - 1):
+        a = acts[layer]
+        for j in range(a.shape[1]):
+            col = a[:, j]
+            on = col[col > 0]
+            examples, seen = [], set()
+            for i in np.argsort(-col):
+                if col[i] <= 0 or len(examples) >= top:
+                    break
+                text = describe(x[i])
+                if text in seen:
+                    continue
+                seen.add(text)
+                examples.append({"text": text, "act": round(float(col[i]), 3)})
+            hi = float(on.max()) if on.size else 1.0
+            counts, edges = np.histogram(on, bins=bins, range=(0.0, hi)) if on.size else (
+                np.zeros(bins, dtype=int), np.linspace(0, 1, bins + 1))
+            out[f"h{layer}_{j}"] = {
+                "examples": examples,
+                "hist": {"max": round(hi, 3), "counts": counts.tolist()},
+                "active": round(float((col > 0).mean()), 4),
+            }
+    return out
+
+
 def _push(net: MLP, acts: list[np.ndarray], layer: int, j: int) -> np.ndarray:
     """How much one unit of neuron j raises each logit, from the layer's average state."""
     base = acts[layer].mean(axis=0)
