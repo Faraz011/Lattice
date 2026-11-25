@@ -55,6 +55,11 @@ export function MapillaryCam({ world, map, track, forced, tick, physics, rear, o
     let raf = 0
     let lastCredit = ''
     let errors = 0
+    // The photo on top, the one it replaced underneath, and when the switch began: a switch is
+    // a short fade in time, so a car that stops mid-way never leaves two photos blended.
+    let shown: Photo | null = null
+    let under: Photo | null = null
+    let switchedAt = 0
     const L = map.length_m
 
     // Where the car is among the photos: the one just passed, and the next.
@@ -117,10 +122,20 @@ export function MapillaryCam({ world, map, track, forced, tick, physics, rear, o
       let into = carS - here.s
       if (into < 0) into += L
       const t = gap < 40 ? Math.min(1, into / gap) : 0
-      // Ease forward into this photo; fade the next in over the last third.
-      const fade = t > 0.62 && ready.has(next.id) ? (t - 0.62) / 0.38 : 0
-      show(imgA.current, here, 1, 1 + 0.16 * t)
-      show(imgB.current, next, fade, 1 + 0.02 * fade)
+      // Show the nearer photo; switch to the next once past halfway, as a quick timed fade.
+      const want = t > 0.55 && ready.has(next.id) ? next : here
+      if (!shown || (want.id !== shown.id && ready.has(want.id))) {
+        under = shown
+        shown = want
+        switchedAt = now
+      }
+      // A gentle push-in as the car moves past the photo's own position.
+      const past = shown.id === here.id ? t : t - 1
+      const zoom = 1.03 + 0.1 * Math.max(0, Math.min(1, past + 0.3))
+      const fade = Math.min(1, (now - switchedAt) / 420)
+      show(imgA.current, under ?? undefined, 1, zoom)
+      show(imgB.current, shown, under ? fade : 1, zoom)
+      if (fade >= 1) under = null
       const c = here.by ? `photo ${here.by}, ${here.date}` : here.date
       if (c !== lastCredit) { lastCredit = c; setCredit(c) }
 

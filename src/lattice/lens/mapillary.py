@@ -94,10 +94,42 @@ def fetch(route: dict, token: str) -> dict[str, dict]:
     return photos
 
 
+def sequence_speeds(photos: dict[str, dict], lat0: float) -> dict[str, float]:
+    """Each sequence's median speed in m/s, from the time and distance between its photos.
+
+    A camera on a car moves at driving speed; a phone carried on the pavement moves at walking
+    speed. The car's camera view should come from the first kind.
+    """
+    by_seq: dict[str, list[dict]] = {}
+    for p in photos.values():
+        if p.get("sequence") and p.get("captured_at"):
+            by_seq.setdefault(p["sequence"], []).append(p)
+    speeds = {}
+    for seq, items in by_seq.items():
+        items.sort(key=lambda p: p["captured_at"])
+        steps = []
+        for a, b in zip(items, items[1:], strict=False):
+            dt = (b["captured_at"] - a["captured_at"]) / 1000
+            if 0.2 < dt < 30:
+                ax, ay = _metres(*a["computed_geometry"]["coordinates"], lat0)
+                bx, by = _metres(*b["computed_geometry"]["coordinates"], lat0)
+                steps.append(math.hypot(bx - ax, by - ay) / dt)
+        if steps:
+            steps.sort()
+            speeds[seq] = steps[len(steps) // 2]
+    return speeds
+
+
 def choose(route: dict, photos: dict[str, dict], facing: float) -> list[dict]:
-    """The best photo for each STEP of the route; `facing` 0 for forward, 180 for backward."""
+    """The best photo for each STEP of the route; `facing` 0 for forward, 180 for backward.
+
+    Preferred: taken from a moving vehicle (its sequence moves at driving speed), in the
+    carriageway rather than on the pavement, pointing along the road, recent, and from the same
+    sequence as the photo before.
+    """
     now = datetime.now(UTC).timestamp() * 1000
     lat0 = route["route"][0][1]
+    speeds = sequence_speeds(photos, lat0)
     flat = [p for p in photos.values() if not p.get("is_pano")]
     where = {p["id"]: _metres(*p["computed_geometry"]["coordinates"], lat0) for p in flat}
     cell = 20.0  # a grid of 20 m cells, so each point only looks at photos nearby
@@ -125,7 +157,11 @@ def choose(route: dict, photos: dict[str, dict], facing: float) -> list[dict]:
                 continue
             years = (now - p.get("captured_at", now)) / 3.156e10
             same = p.get("sequence") == last_seq
-            score = dist + 0.35 * off + 1.5 * max(0.0, years) + (0 if same else 10)
+            speed = speeds.get(p.get("sequence"), 0.0)
+            walking = 0 if speed >= 3.5 else 30 if speed >= 1.5 else 60  # not from a vehicle
+            pavement = 4 * max(0.0, dist - 6)  # off the carriageway
+            score = (dist + pavement + 0.35 * off + 3 * max(0.0, years) + walking
+                     + (0 if same else 10))
             if score < best_score:
                 best, best_score = p, score
         if best:
@@ -174,10 +210,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--route", type=Path, default=Path("lens/public/maps/london.json"))
     parser.add_argument("--env", type=Path, default=Path("lens/.env.local"))
     parser.add_argument("--out", type=Path, default=Path("lens/public/maps/london-mapillary.json"))
+    # The raw search results, kept out of git: re-picking from them takes seconds, searching
+    # again about twenty minutes.
+    parser.add_argument("--cache", type=Path, default=Path("data/mapillary-photos.json"))
+    parser.add_argument("--refresh", action="store_true", help="search Mapillary again")
     args = parser.parse_args(argv)
     route = json.loads(args.route.read_text())
-    token = _token(args.env)
-    photos = fetch(route, token)
+    if args.cache.exists() and not args.refresh:
+        photos = json.loads(args.cache.read_text())
+        print(f"{len(photos)} photos from {args.cache} (--refresh to search again)")
+    else:
+        photos = fetch(route, _token(args.env))
+        args.cache.parent.mkdir(parents=True, exist_ok=True)
+        args.cache.write_text(json.dumps(photos))
     front, rear = choose(route, photos, 0), choose(route, photos, 180)
     data = {
         "source": "Mapillary contributors, CC BY-SA 4.0",

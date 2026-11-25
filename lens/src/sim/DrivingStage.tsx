@@ -48,10 +48,13 @@ export function DrivingStage({ net, route, off, send }: Props) {
   const [street, setStreet] = useState(Boolean(STREET_KEY) && !FORCE_OPEN)
   // Real street photos from Mapillary come first for the car's own cameras, when a token and
   // the chosen photos are available.
-  const [photos, setPhotos] = useState<PhotoTrack | null>(null)
+  // undefined while the chosen photos are still loading: no other view is tried meanwhile.
+  const [photos, setPhotos] = useState<PhotoTrack | null | undefined>(
+    MAPILLARY_TOKEN && !FORCE_OPEN ? undefined : null)
   useEffect(() => {
     if (!MAPILLARY_TOKEN || FORCE_OPEN) return
-    loadPhotoTrack().then(setPhotos).catch((e: Error) => fellBack('Mapillary', e.message))
+    loadPhotoTrack().then(setPhotos)
+      .catch((e: Error) => { fellBack('Mapillary', e.message); setPhotos(null) })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   // Pause at a moment worth explaining: once braking is steady, or once the car has stopped.
@@ -143,7 +146,9 @@ export function DrivingStage({ net, route, off, send }: Props) {
   return (
     <div className="sim">
       <div className="stage city">
-        {photos && camera !== 'chase'
+        {photos === undefined && camera !== 'chase'
+          ? <div className="city-wrap"><div className="city-map photos" /></div>
+          : photos && camera !== 'chase'
           ? <MapillaryCam world={world} map={route} track={photos} forced={forced}
               tick={physics.tick_s} physics={physics} rear={camera === 'rear'}
               onFail={(why) => { fellBack('Mapillary', why); setPhotos(null) }} />
@@ -158,7 +163,8 @@ export function DrivingStage({ net, route, off, send }: Props) {
           : <CityMap world={world} map={route} forced={forced} tick={physics.tick_s}
               physics={physics} camera={camera} />}
         <span className="cam-label" aria-hidden="true">
-          {CAMERA_NAMES[camera]} · {camera !== 'chase' && photos ? 'STREET PHOTOS'
+          {CAMERA_NAMES[camera]} · {camera !== 'chase' && photos === undefined ? 'LOADING'
+            : camera !== 'chase' && photos ? 'STREET PHOTOS'
             : street && camera !== 'chase' ? 'STREET VIEW' : photo ? '3D CITY' : 'MAP'}
         </span>
         {!photo && Boolean(ION_TOKEN) && !FORCE_OPEN && (
