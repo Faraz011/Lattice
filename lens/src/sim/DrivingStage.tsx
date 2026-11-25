@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Message } from '../link'
 import type { Net } from '../model/net'
 import { CityMap } from './CityMap'
-import { ION_TOKEN, PhotoCity, TRY_PHOTO } from './PhotoCity'
+import { FORCE_OPEN, ION_TOKEN, PhotoCity, TRY_PHOTO, type Camera } from './PhotoCity'
 import {
   ACTIONS, cutIn, describe, features, nextLight, reference, rel, step, stepOut, worldFromMap,
   type Colour, type Physics, type RouteMap, type World,
@@ -16,6 +16,10 @@ const INCIDENT_WORDS = {
   pedestrian: 'Drove through a crosswalk with someone on it',
   collision: 'Hit the car ahead',
 } as const
+
+const CAMERA_NAMES: Record<Camera, string> = {
+  front: 'FRONT CAMERA', rear: 'REAR CAMERA', chase: 'CHASE VIEW',
+}
 
 interface Props {
   net: Net
@@ -31,8 +35,9 @@ export function DrivingStage({ net, route, off, send }: Props) {
   const forcedUntil = useRef(new Map<number, number>())
   const [paused, setPaused] = useState(false)
   // Photorealistic London when a Cesium ion token is configured; the open map otherwise.
-  const [photo, setPhoto] = useState(Boolean(ION_TOKEN) || TRY_PHOTO)
+  const [photo, setPhoto] = useState((Boolean(ION_TOKEN) || TRY_PHOTO) && !FORCE_OPEN)
   const [photoNote, setPhotoNote] = useState<string | null>(null)
+  const [camera, setCamera] = useState<Camera>('front')
   // Pause at a moment worth explaining: once braking is steady, or once the car has stopped.
   const [armed, setArmed] = useState<'brake' | 'stop' | null>(null)
   const braking = useRef(0) // consecutive ticks of braking
@@ -124,8 +129,17 @@ export function DrivingStage({ net, route, off, send }: Props) {
       <div className="stage city">
         {photo
           ? <PhotoCity world={world} map={route} forced={forced} tick={physics.tick_s}
+              physics={physics} camera={camera}
               onFail={(why) => { setPhotoNote(why); setPhoto(false) }} />
-          : <CityMap world={world} map={route} forced={forced} tick={physics.tick_s} />}
+          : <CityMap world={world} map={route} forced={forced} tick={physics.tick_s}
+              physics={physics} camera={camera} />}
+        <span className="cam-label" aria-hidden="true">{CAMERA_NAMES[camera]}</span>
+        <div className="cams" role="group" aria-label="Camera">
+          {(['front', 'rear', 'chase'] as Camera[]).map((c) => (
+            <button key={c} type="button" aria-pressed={camera === c} onClick={() => setCamera(c)}>
+              {c === 'front' ? 'Front camera' : c === 'rear' ? 'Rear camera' : 'Chase view'}</button>
+          ))}
+        </div>
         {photoNote && <p className="photo-note" role="status">Photorealistic view unavailable
           ({photoNote}); showing the open map.</p>}
         <div className="hud" aria-hidden="true">

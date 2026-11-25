@@ -6,8 +6,11 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import type * as CesiumNS from 'cesium'
 
-import { colourAt, rel, ROAD_WIDTH, type Colour, type RouteMap, type World } from './driving'
+import {
+  colourAt, rel, ROAD_WIDTH, type Colour, type Physics, type RouteMap, type World,
+} from './driving'
 import { offset, poseAt, type Pose } from './geo'
+import { drawBoxes, seen as detect, type Box as Detection } from './perception'
 
 type Ground = Pose & { ground: number } // a pose with the ground's height there
 
@@ -21,6 +24,9 @@ export const ION_TOKEN = (import.meta.env.VITE_CESIUM_ION_TOKEN as string | unde
 // Local development only: `?photo` tries the view with the evaluation token built into CesiumJS,
 // for checking the view before a token is set up. Never in a production build.
 export const TRY_PHOTO = import.meta.env.DEV && new URLSearchParams(window.location.search).has('photo')
+// `?open` forces the open map, token or not: for a machine whose graphics cannot run the
+// photorealistic city.
+export const FORCE_OPEN = new URLSearchParams(window.location.search).has('open')
 const LANE = -1.9 // keep left
 const KERB = -6.5
 const STEP = 20 // metres between sampled ground heights
@@ -52,11 +58,20 @@ interface Props {
   map: RouteMap
   forced: RefObject<Map<number, Colour>>
   tick: number // seconds per simulation step, for drawing between steps
+  physics: Physics
+  camera: Camera
   onFail: (why: string) => void
 }
 
-export function PhotoCity({ world, map, forced, tick, onFail }: Props) {
+// Which of the car's cameras the view shows: the front camera at windscreen height (what the
+// car's network sees), the rear camera, or a chase view from behind and above.
+export type Camera = 'front' | 'rear' | 'chase'
+
+export function PhotoCity({ world, map, forced, tick, physics, camera, onFail }: Props) {
   const host = useRef<HTMLDivElement>(null)
+  const boxes = useRef<HTMLDivElement>(null)
+  const cam = useRef(camera)
+  cam.current = camera
   const failed = useRef(onFail)
   failed.current = onFail
 
@@ -89,30 +104,69 @@ export function PhotoCity({ world, map, forced, tick, onFail }: Props) {
         viewer.destroy()
         return
       }
-      cleanup = drive(C, viewer, world, map, forced, tick, host.current)
+      cleanup = drive(C, viewer, { world, map, forced, tick, physics, cam, boxes: boxes.current,
+        host: host.current })
     }).catch((e: Error) => failed.current(e.message))
     return () => { alive = false; cleanup() }
-  }, [world, map, forced, tick])
+  }, [world, map, forced, tick, physics])
 
-  return <div ref={host} className="city-map photo" role="img"
-    aria-label={`Photorealistic 3D London: ${map.name}, following the car`} />
+  return (
+    <div className="city-wrap">
+      <div ref={host} className="city-map photo loading" role="img"
+        aria-label={`Photorealistic 3D London, from the car's ${camera} camera: ${map.name}`} />
+      <div ref={boxes} className="perception" aria-hidden="true" />
+      <p className="loading-note">Loading London in 3D</p>
+    </div>
+  )
 }
 
-function drive(C: typeof CesiumNS, viewer: CesiumNS.Viewer, world: RefObject<World>, map: RouteMap,
-  forced: RefObject<Map<number, Colour>>, tick: number, host: HTMLDivElement): () => void {
+interface Drive {
+  world: RefObject<World>
+  map: RouteMap
+  forced: RefObject<Map<number, Colour>>
+  tick: number
+  physics: Physics
+  cam: RefObject<Camera>
+  boxes: HTMLDivElement | null
+  host: HTMLDivElement
+}
+
+function drive(C: typeof CesiumNS, viewer: CesiumNS.Viewer, d: Drive): () => void {
+  const { world, map, forced, tick, physics, cam, boxes, host } = d
   const scene = viewer.scene
+  const frustum = viewer.camera.frustum as CesiumNS.PerspectiveFrustum
+  frustum.fov = C.Math.toRadians(72) // a wide-angle car camera
+  frustum.near = 0.2
   const L = map.length_m
 
   // Ground height along the route, sampled from the 3D tiles a stretch ahead at a time.
   const heights = new Float64Array(Math.ceil(L / STEP) + 1).fill(NaN)
   let pending = false
+  // The road's height at sample k. Google's 3D city includes trees, buses and parked cars, so a
+  // sample can land on a roof: the lowest of a sample and its neighbours is the road. Where
+  // nothing is sampled yet, the nearest sample stands in.
+  let known = FALLBACK_HEIGHT
+  const road = (k: number): number => {
+    const n = heights.length
+    let low = NaN
+    for (const j of [k - 1, k, k + 1]) {
+      const h = heights[((j % n) + n) % n]
+      if (!Number.isNaN(h) && !(h > low)) low = h
+    }
+    if (!Number.isNaN(low)) return low
+    for (let r = 2; r < 25; r++) {
+      for (const j of [k - r, k + r]) {
+        const h = heights[((j % n) + n) % n]
+        if (!Number.isNaN(h)) return h
+      }
+    }
+    return known
+  }
   const groundAt = (s: number) => {
     const at = ((s % L) + L) % L
     const k = Math.floor(at / STEP)
-    const a = heights[k]
-    const b = heights[Math.min(k + 1, heights.length - 1)]
-    if (Number.isNaN(a)) return Number.isNaN(b) ? FALLBACK_HEIGHT : b
-    if (Number.isNaN(b)) return a
+    const a = road(k)
+    const b = road(k + 1)
     return a + (b - a) * ((at - k * STEP) / STEP)
   }
   const sampleAhead = () => {
@@ -129,8 +183,12 @@ function drive(C: typeof CesiumNS, viewer: CesiumNS.Viewer, world: RefObject<Wor
       const p = poseAt(map, k * STEP)
       return C.Cartographic.fromDegrees(p.lng, p.lat)
     })
-    scene.sampleHeightMostDetailed(points).then((done) => {
-      done.forEach((c, i) => { if (c && Number.isFinite(c.height)) heights[todo[i]] = c.height })
+    // Our own cars, poles and people are not the ground: sampling must look through them.
+    scene.sampleHeightMostDetailed(points, viewer.entities.values).then((done) => {
+      done.forEach((c, i) => {
+        if (c && Number.isFinite(c.height)) { heights[todo[i]] = c.height; known = c.height }
+      })
+      host.classList.remove('loading')
     }).catch(() => {}).finally(() => { pending = false })
   }
   const sampler = window.setInterval(sampleAhead, 1500)
@@ -197,9 +255,10 @@ function drive(C: typeof CesiumNS, viewer: CesiumNS.Viewer, world: RefObject<Wor
     // Our car, drawn between its last two positions.
     const carS = smooth(w.car.prev, w.car.at, alpha)
     const car = poseOf(carS)
-    placeCar(ego, car, LANE, true)
+    const mode = cam.current ?? 'front'
+    placeCar(ego, car, LANE, mode === 'chase') // from its own cameras, the car is not in view
     brake.forEach((e, k) => {
-      e.show = w.action === 2
+      e.show = w.action === 2 && mode === 'chase'
       const p = at(car, -2.32, LANE + (k ? 0.6 : -0.6), car.ground + 0.95)
       e.position = new C.ConstantPositionProperty(p)
       e.orientation = new C.ConstantProperty(orient(p, car.bearing))
@@ -270,15 +329,44 @@ function drive(C: typeof CesiumNS, viewer: CesiumNS.Viewer, world: RefObject<Wor
     }
     for (const [id, e] of people) if (!here.has(id)) { viewer.entities.remove(e); people.delete(id) }
 
-    // Chase camera: behind and above our car, turning smoothly by elapsed time.
-    const look = poseAt(map, carS, 30)
+    // The camera, turning smoothly by elapsed time. The front and rear cameras sit on the car at
+    // windscreen height and look along the road; the chase view sits behind and above.
+    const look = poseAt(map, carS, mode === 'chase' ? 30 : 14)
     const turn = ((look.bearing - bearing + 540) % 360) - 180
-    bearing = (bearing + turn * (1 - Math.exp(-Math.min(now - last, 500) / 450)) + 360) % 360
+    const settle = mode === 'chase' ? 450 : 220
+    bearing = (bearing + turn * (1 - Math.exp(-Math.min(now - last, 500) / settle)) + 360) % 360
     last = now
-    const behind = { ...car, bearing }
-    const eye = at(behind, -26, LANE, car.ground + 13)
-    viewer.camera.setView({ destination: eye, orientation: {
-      heading: C.Math.toRadians(bearing), pitch: C.Math.toRadians(-22), roll: 0 } })
+    const heading = { ...car, bearing }
+    if (mode === 'front') {
+      viewer.camera.setView({ destination: at(heading, 0.9, LANE, car.ground + 1.4), orientation: {
+        heading: C.Math.toRadians(bearing), pitch: C.Math.toRadians(-3), roll: 0 } })
+    } else if (mode === 'rear') {
+      viewer.camera.setView({ destination: at(heading, -2.4, LANE, car.ground + 1.3), orientation: {
+        heading: C.Math.toRadians((bearing + 180) % 360), pitch: C.Math.toRadians(-4), roll: 0 } })
+    } else {
+      viewer.camera.setView({ destination: at(heading, -26, LANE, car.ground + 13), orientation: {
+        heading: C.Math.toRadians(bearing), pitch: C.Math.toRadians(-22), roll: 0 } })
+    }
+
+    // What the cameras detect, boxed on the view.
+    const found: Detection[] = []
+    const camPos = viewer.camera.positionWC
+    const dir = viewer.camera.directionWC
+    const toward = new C.Cartesian3()
+    for (const o of detect(w, physics, forced.current ?? undefined)) {
+      const p = poseOf(o.s)
+      const bottom = at(p, 0, o.right, p.ground + o.base)
+      const top = at(p, 0, o.right, p.ground + o.base + o.height)
+      C.Cartesian3.subtract(bottom, camPos, toward)
+      if (C.Cartesian3.dot(toward, dir) <= 1) continue // behind the camera
+      const b = C.SceneTransforms.worldToWindowCoordinates(scene, bottom)
+      const t = C.SceneTransforms.worldToWindowCoordinates(scene, top)
+      if (!b || !t) continue
+      const h = Math.abs(b.y - t.y)
+      found.push({ key: o.key, kind: o.kind, x: b.x, y: b.y, w: h * (o.width / o.height),
+        h, label: o.label, used: o.used })
+    }
+    drawBoxes(boxes, mode === 'chase' ? [] : found)
 
     host.classList.toggle('night', w.night)
     host.classList.toggle('rain', w.rain)
