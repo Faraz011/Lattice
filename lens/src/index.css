@@ -234,3 +234,9 @@ button.quiet { border-color: transparent; text-decoration: underline; }
   .headline { flex-direction: column; align-items: flex-start; }
   .net3d { height: 26rem; }
 }
+
+/* ---- the photorealistic city ---- */
+.city-map.photo .cesium-viewer-bottom { display: block; }
+.city-map.photo .cesium-widget-credits { font-size: 0.6875rem; }
+.photo-note { position: absolute; top: 0.75rem; left: 0.75rem; right: 0.75rem; background: rgba(246,248,243,0.92);
+  padding: 0.375rem 0.625rem; border-radius: 4px; font-size: var(--step--1); }

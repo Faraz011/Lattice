@@ -6,7 +6,7 @@ import maplibregl, { type GeoJSONSource, type Map as MapLibre } from 'maplibre-g
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useEffect, useRef, type RefObject } from 'react'
 
-import { colourAt, rel, ROAD_WIDTH, type Colour, type RouteMap, type World } from './driving'
+import { between, colourAt, rel, ROAD_WIDTH, type Colour, type RouteMap, type World } from './driving'
 import { box, collection, feature, offset, poseAt, type LngLat } from './geo'
 
 const STYLE = 'https://tiles.openfreemap.org/styles/liberty'
@@ -20,9 +20,10 @@ interface Props {
   world: RefObject<World>
   map: RouteMap
   forced: RefObject<Map<number, Colour>>
+  tick: number // seconds per simulation step, for drawing between steps
 }
 
-export function CityMap({ world, map, forced }: Props) {
+export function CityMap({ world, map, forced, tick }: Props) {
   const container = useRef<HTMLDivElement>(null)
   const night = useRef(false)
 
@@ -54,12 +55,14 @@ export function CityMap({ world, map, forced }: Props) {
         const now = performance.now()
         const ease = 1 - Math.exp(-Math.min(now - last, 500) / 450)
         last = now
-        const look = poseAt(map, w.car.at, 30)
+        const alpha = Math.min(1, (now - (w.tickAt ?? now)) / (tick * 1000))
+        const carAt = between(w.car.prev, w.car.at, alpha, w.length)
+        const look = poseAt(map, carAt, 30)
         const turn = ((look.bearing - camera.bearing + 540) % 360) - 180
         camera = { bearing: (camera.bearing + turn * ease + 360) % 360 }
-        const centre = offset({ ...poseAt(map, w.car.at), bearing: camera.bearing }, 22, LANE)
+        const centre = offset({ ...poseAt(map, carAt), bearing: camera.bearing }, 22, LANE)
         m.jumpTo({ center: centre, bearing: camera.bearing })
-        draw(m, map, w, forced.current ?? undefined)
+        draw(m, map, w, alpha, forced.current ?? undefined)
         if (night.current !== w.night) {
           night.current = w.night
           container.current?.classList.toggle('night', w.night)
@@ -105,7 +108,7 @@ function addLayers(m: MapLibre, map: RouteMap) {
   solid('brake', '#ff2d3f', 0.7, 1.1)
 }
 
-function draw(m: MapLibre, map: RouteMap, w: World, forced?: Map<number, Colour>) {
+function draw(m: MapLibre, map: RouteMap, w: World, alpha: number, forced?: Map<number, Colour>) {
   const near = (at: number) => { const d = rel(w, at); return d > -DRAW_BEHIND && d < DRAW_AHEAD }
   const set = (id: string, data: ReturnType<typeof collection>) =>
     (m.getSource(id) as GeoJSONSource | undefined)?.setData(data)
@@ -127,7 +130,7 @@ function draw(m: MapLibre, map: RouteMap, w: World, forced?: Map<number, Colour>
     return feature(box(poseAt(map, x.crosswalk, 6), 0.7, 0.7, across))
   })))
 
-  const car = poseAt(map, w.car.at, 6)
+  const car = poseAt(map, between(w.car.prev, w.car.at, alpha, w.length), 6)
   // What the car can see: 120 m of road ahead, drawn as a fan following the route.
   const left: LngLat[] = []
   const right: LngLat[] = []
@@ -139,8 +142,17 @@ function draw(m: MapLibre, map: RouteMap, w: World, forced?: Map<number, Colour>
   }
   set('sensor', collection([feature([...left, ...right.reverse(), left[0]])]))
   const cars = [feature(box(car, 4.6, 1.9, LANE), { color: '#2f6fed' })]
-  if (w.lead && near(w.lead.at)) {
-    cars.push(feature(box(poseAt(map, w.lead.at, 6), 4.6, 1.9, LANE), { color: '#7d8799' }))
+  for (const v of w.traffic.filter((o) => near(o.at))) {
+    const p = poseAt(map, between(v.prev, v.at, alpha, w.length), 6)
+    const facing = v.lane === 1 ? p : { ...p, bearing: (p.bearing + 180) % 360 }
+    cars.push(feature(box(facing, v.length, 1.85, LANE), { color: v.color })) // keep left
+  }
+  // Cross traffic at the junction ahead, while our light is red.
+  for (const c of w.cross) {
+    const j = poseAt(map, c.junction + 8, 10)
+    const [lng, lat] = offset(j, 0, c.prevX + (c.x - c.prevX) * alpha)
+    const side = { lng, lat, bearing: (j.bearing + (c.dir === 1 ? 90 : 270)) % 360 }
+    cars.push(feature(box(side, 4.5, 1.85, -1.9), { color: c.color }))
   }
   set('cars', collection(cars))
   const braking = w.action === 2

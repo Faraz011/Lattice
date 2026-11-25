@@ -11,3 +11,8 @@ services:
     dockerContext: .
     healthCheckPath: /health
     autoDeploy: true
+    envVars:
+      # Free Cesium ion token for Google's photorealistic 3D London (ion.cesium.com > Access
+      # Tokens). Set it in the Render dashboard; without it the car drives on the open map.
+      - key: VITE_CESIUM_ION_TOKEN
+        sync: false

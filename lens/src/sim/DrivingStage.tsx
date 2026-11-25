@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Message } from '../link'
 import type { Net } from '../model/net'
 import { CityMap } from './CityMap'
+import { ION_TOKEN, PhotoCity, TRY_PHOTO } from './PhotoCity'
 import {
   ACTIONS, cutIn, describe, features, nextLight, reference, rel, step, stepOut, worldFromMap,
   type Colour, type Physics, type RouteMap, type World,
@@ -29,6 +30,9 @@ export function DrivingStage({ net, route, off, send }: Props) {
   const forced = useRef(new Map<number, Colour>())
   const forcedUntil = useRef(new Map<number, number>())
   const [paused, setPaused] = useState(false)
+  // Photorealistic London when a Cesium ion token is configured; the open map otherwise.
+  const [photo, setPhoto] = useState(Boolean(ION_TOKEN) || TRY_PHOTO)
+  const [photoNote, setPhotoNote] = useState<string | null>(null)
   // Pause at a moment worth explaining: once braking is steady, or once the car has stopped.
   const [armed, setArmed] = useState<'brake' | 'stop' | null>(null)
   const braking = useRef(0) // consecutive ticks of braking
@@ -56,6 +60,7 @@ export function DrivingStage({ net, route, off, send }: Props) {
           }
         }
         step(w, physics, net, live.current.ablation, forced.current)
+        w.tickAt = performance.now()
         braking.current = w.action === 2 ? braking.current + 1 : 0
         // Committed: braking for 0.8 s, not the first marginal tick of it; or standing still.
         const when = live.current.armed
@@ -117,7 +122,12 @@ export function DrivingStage({ net, route, off, send }: Props) {
   return (
     <div className="sim">
       <div className="stage city">
-        <CityMap world={world} map={route} forced={forced} />
+        {photo
+          ? <PhotoCity world={world} map={route} forced={forced} tick={physics.tick_s}
+              onFail={(why) => { setPhotoNote(why); setPhoto(false) }} />
+          : <CityMap world={world} map={route} forced={forced} tick={physics.tick_s} />}
+        {photoNote && <p className="photo-note" role="status">Photorealistic view unavailable
+          ({photoNote}); showing the open map.</p>}
         <div className="hud" aria-hidden="true">
           <span className="speed">{Math.round(w.car.speed * 3.6)}<small>km/h</small></span>
           <span className={`act ${act}`}>{act}</span>
