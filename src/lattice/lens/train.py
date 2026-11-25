@@ -148,7 +148,8 @@ def _place(account: str, kind: str, owner: str, country: str) -> dict:
     rng = random.Random(account)
     angle, radius = rng.uniform(0, 6.283), rng.uniform(0.004, 0.05)  # about 0.5 to 5 km
     return {"id": account, "kind": kind, "owner": owner, "country": country, "city": city,
-            "currency": currency, "iban": f"{country}{rng.randint(10, 99)} •••• {account[-4:].upper()}",
+            "currency": currency,
+            "iban": f"{country}{rng.randint(10, 99)} •••• {account[-4:].upper()}",
             "lng": round(lng + radius * 1.6 * math.cos(angle), 5),
             "lat": round(lat + radius * math.sin(angle), 5)}
 

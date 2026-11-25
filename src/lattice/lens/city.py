@@ -94,7 +94,8 @@ def place(line: list[list[float]], nodes: list[dict]) -> dict:
         for i, (a, b) in enumerate(zip(pts, pts[1:], strict=False)):
             dx, dy = b[0] - a[0], b[1] - a[1]
             seg = dx * dx + dy * dy
-            t = 0.0 if seg == 0 else max(0.0, min(1.0, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / seg))
+            dot = (q[0] - a[0]) * dx + (q[1] - a[1]) * dy
+            t = 0.0 if seg == 0 else max(0.0, min(1.0, dot / seg))
             px, py = a[0] + t * dx, a[1] + t * dy
             d = math.hypot(q[0] - px, q[1] - py)
             if d < best[0]:

@@ -13,6 +13,7 @@ Rooms live in memory: a restart empties them, and the devices resend their state
 
 import argparse
 import asyncio
+import contextlib
 import json
 import os
 import re
@@ -57,10 +58,8 @@ class Rooms:
             self.latest[room][kind] = text
             others = [p for p in self.peers.get(room, ()) if p is not sender]
         for peer in others:
-            try:
+            with contextlib.suppress(RuntimeError):  # closed between the snapshot and the send
                 await peer.send_text(text)
-            except RuntimeError:  # closed between the snapshot and the send
-                pass
 
 
 def create_app(static: Path | None = None) -> FastAPI:
