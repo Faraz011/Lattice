@@ -48,5 +48,6 @@ dev = [
     "ruff>=0.17.1",
 ]
 lens = [
+    "mapbox-vector-tile>=2.2.0",
     "numpy>=2.4.6",
 ]

@@ -494,3 +494,25 @@ body.console-page { background: #15171b; }
 .city-map.photos { background: #1d2128; overflow: hidden; }
 .city-map.photos img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
   transform-origin: 50% 46%; will-change: transform, opacity; }
+
+/* ---- photo frames with real detections ---- */
+.photo-frame { position: absolute; inset: 0; transform-origin: 50% 46%; will-change: transform, opacity; }
+.photo-frame .plate { position: absolute; }
+.photo-frame .plate img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.photo-frame .boxes { position: absolute; inset: 0; }
+.perception.real .det { border: 1.5px solid rgba(90, 169, 255, 0.85); border-radius: 2px; }
+.perception.real .det span { background: rgba(90, 169, 255, 0.9); color: #0b1220; font-size: 10px; }
+.perception.real .det.pedestrian { border-color: rgba(255, 196, 61, 0.9); }
+.perception.real .det.pedestrian span { background: rgba(255, 196, 61, 0.95); }
+.perception.real .det.light-real { border-color: rgba(46, 224, 122, 0.85); }
+.perception.real .det.light-real span { background: rgba(46, 224, 122, 0.9); }
+.perception.real .det:not(.used) span { opacity: 0.85; }
+.perception.real .det.used { border-width: 3px; box-shadow: 0 0 0 1px rgba(0,0,0,0.35); }
+.perception.real .det.used span { font-size: 11.5px; font-weight: 700; }
+.city-map.photos.night .photo-frame img { filter: brightness(0.68) saturate(0.62) contrast(1.1) hue-rotate(10deg); }
+.city-map.photos.night .plate::before { content: ''; position: absolute; inset: 0; pointer-events: none;
+  z-index: 1; background: radial-gradient(ellipse 55% 38% at 50% 100%, rgba(255, 236, 190, 0.22), transparent 70%),
+    linear-gradient(rgba(14, 22, 48, 0.24), rgba(14, 22, 48, 0.06)); }
+.photo-frame .boxes { z-index: 2; }
+.city-map.photos.rain .photo-frame img { filter: saturate(0.75) brightness(0.9) contrast(0.95); }
+.city-map.photos.night.rain .photo-frame img { filter: brightness(0.5) saturate(0.5) contrast(1.08); }
