@@ -7,6 +7,7 @@ import type { Net } from '../model/net'
 import { CityMap } from './CityMap'
 import { FORCE_OPEN, ION_TOKEN, PhotoCity, TRY_PHOTO, type Camera } from './PhotoCity'
 import { StreetCam } from './StreetCam'
+import { loadPhotoTrack, MapillaryCam, MAPILLARY_TOKEN, type PhotoTrack } from './MapillaryCam'
 import { STREET_KEY } from './streetview'
 import {
   ACTIONS, cutIn, describe, features, nextLight, reference, rel, step, stepOut, worldFromMap,
@@ -45,6 +46,14 @@ export function DrivingStage({ net, route, off, send }: Props) {
   const [camera, setCamera] = useState<Camera>('front')
   // Google Street View for the car's own cameras, when a key is configured.
   const [street, setStreet] = useState(Boolean(STREET_KEY) && !FORCE_OPEN)
+  // Real street photos from Mapillary come first for the car's own cameras, when a token and
+  // the chosen photos are available.
+  const [photos, setPhotos] = useState<PhotoTrack | null>(null)
+  useEffect(() => {
+    if (!MAPILLARY_TOKEN || FORCE_OPEN) return
+    loadPhotoTrack().then(setPhotos).catch((e: Error) => fellBack('Mapillary', e.message))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   // Pause at a moment worth explaining: once braking is steady, or once the car has stopped.
   const [armed, setArmed] = useState<'brake' | 'stop' | null>(null)
   const braking = useRef(0) // consecutive ticks of braking
@@ -134,7 +143,11 @@ export function DrivingStage({ net, route, off, send }: Props) {
   return (
     <div className="sim">
       <div className="stage city">
-        {street && camera !== 'chase'
+        {photos && camera !== 'chase'
+          ? <MapillaryCam world={world} map={route} track={photos} forced={forced}
+              tick={physics.tick_s} physics={physics} rear={camera === 'rear'}
+              onFail={(why) => { fellBack('Mapillary', why); setPhotos(null) }} />
+          : street && camera !== 'chase'
           ? <StreetCam world={world} map={route} forced={forced} tick={physics.tick_s}
               physics={physics} rear={camera === 'rear'}
               onFail={(why) => { fellBack('Street View', why); setStreet(false) }} />
@@ -145,7 +158,8 @@ export function DrivingStage({ net, route, off, send }: Props) {
           : <CityMap world={world} map={route} forced={forced} tick={physics.tick_s}
               physics={physics} camera={camera} />}
         <span className="cam-label" aria-hidden="true">
-          {CAMERA_NAMES[camera]} · {street && camera !== 'chase' ? 'STREET VIEW' : photo ? '3D CITY' : 'MAP'}
+          {CAMERA_NAMES[camera]} · {camera !== 'chase' && photos ? 'STREET PHOTOS'
+            : street && camera !== 'chase' ? 'STREET VIEW' : photo ? '3D CITY' : 'MAP'}
         </span>
         {!photo && Boolean(ION_TOKEN) && !FORCE_OPEN && (
           <button type="button" className="retry-3d" title={photoWhy ?? 'The 3D city is off'}

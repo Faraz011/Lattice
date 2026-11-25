@@ -489,3 +489,8 @@ body.console-page { background: #15171b; }
 /* ---- the active view, and a way back to the 3D city ---- */
 .retry-3d { position: absolute; top: 2.6rem; left: 0.9rem; z-index: 3; font-size: 0.75rem; padding: 0.2rem 0.6rem;
   background: rgba(246,248,243,0.92); border-color: rgba(30,41,66,0.5); }
+
+/* ---- street photos (Mapillary) ---- */
+.city-map.photos { background: #1d2128; overflow: hidden; }
+.city-map.photos img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  transform-origin: 50% 46%; will-change: transform, opacity; }
