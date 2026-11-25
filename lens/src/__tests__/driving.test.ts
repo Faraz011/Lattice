@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest'
 import type { Net } from '../model/net'
 import { trace } from '../model/trace'
 import {
-  cutIn, features, newWorld, reference, step, stepOut, worldFromMap, type Physics, type RouteMap,
+  cutIn, features, newWorld, reference, rel, step, stepOut, worldFromMap, type Physics,
+  type RouteMap,
 } from '../sim/driving'
 
 const net: Net = JSON.parse(readFileSync('public/models/driving.json', 'utf8'))
@@ -70,19 +71,30 @@ describe('a live scene', () => {
 describe('the London route', () => {
   const map: RouteMap = JSON.parse(readFileSync('public/maps/london.json', 'utf8'))
 
-  it('places real junctions and crossings, and the car laps it without an incident', () => {
+  it('places real junctions and crossings, and the car drives it in traffic without an incident', () => {
     const w = worldFromMap(map, 4)
     expect(w.lights.length).toBeGreaterThan(20)
     expect(w.crosswalks.length).toBeGreaterThan(20)
+    expect(w.traffic.length).toBeGreaterThan(6)
     let seed = 11
     const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+    let tightest = Infinity
     for (let t = 0; t < 12_000; t++) { // 20 minutes
       if (t % 300 === 150) stepOut(w, physics)
-      if (t % 900 === 450) cutIn(w)
+      if (t % 900 === 450) cutIn(w, rand)
       step(w, physics, net, {}, undefined, rand)
+      // No two cars in one lane ever overlap: bumper to bumper, a gap stays.
+      for (const lane of [1, -1] as const) {
+        const cars = w.traffic.filter((v) => v.lane === lane)
+          .map((v) => ({ v, d: rel(w, v.at) * lane })).sort((a, b) => a.d - b.d)
+        for (let k = 1; k < cars.length; k++) {
+          tightest = Math.min(tightest, cars[k].d - cars[k - 1].d - cars[k].v.length)
+        }
+      }
     }
-    expect(w.odometer).toBeGreaterThan(map.length_m) // at least a full lap
+    expect(w.odometer).toBeGreaterThan(4000) // London traffic: about 20 km/h on average
     expect(w.car.at).toBeLessThan(map.length_m)
     expect(w.incidents, JSON.stringify(w.incidents)).toEqual([])
+    expect(tightest).toBeGreaterThan(0)
   }, 60_000)
 })

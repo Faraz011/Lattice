@@ -21,10 +21,14 @@ from lattice.datagen.background import build_background
 from lattice.datagen.builder import WINDOW_START, WorldBuilder, days
 from lattice.datagen.manifest import CaseRecord
 from lattice.lens import aml, driving
-from lattice.lens.mlp import MLP, accuracy, export, label_neurons, train
+from lattice.lens.mlp import MLP, accuracy, export, label_neurons, neuron_profiles, train
 
 OUT = Path("lens/public")
 EPISODE_SEED = 4242
+
+
+def _profiled(neurons: list[dict], profiles: dict) -> list[dict]:
+    return [n | profiles.get(n["id"], {}) for n in neurons]
 
 
 def train_driving() -> dict:
@@ -35,8 +39,9 @@ def train_driving() -> dict:
     return export(
         net, name="driving", title="Self-driving car", inputs=driving.INPUTS,
         outputs=driving.OUTPUTS,
-        neurons=label_neurons(net, x[:20_000], driving.INPUTS, driving.OUTPUTS,
-                              concepts=driving.concepts(x[:20_000])),
+        neurons=_profiled(label_neurons(net, x[:20_000], driving.INPUTS, driving.OUTPUTS,
+                                        concepts=driving.concepts(x[:20_000])),
+                          neuron_profiles(net, x[:20_000], driving.describe)),
         metrics={"agreement_with_expert": round(accuracy(net, xt, yt), 4),
                  "test_situations": len(yt)},
         notes="Imitates a rule-based expert driver over 60,000 sampled situations.", data=x,
@@ -55,7 +60,8 @@ def train_aml() -> dict:
               for c, f in enumerate(aml.OUTPUTS) if (yt == c).any()}
     return export(
         net, name="aml", title="AML account check", inputs=aml.INPUTS, outputs=aml.OUTPUTS,
-        neurons=label_neurons(net, x, aml.INPUTS, aml.OUTPUTS),
+        neurons=_profiled(label_neurons(net, x, aml.INPUTS, aml.OUTPUTS),
+                          neuron_profiles(net, x, aml.describe)),
         metrics={"accuracy": round(accuracy(net, xt, yt), 4), "recall": recall,
                  "test_accounts": len(yt)},
         notes="Trained on 12 synthetic worlds with planted laundering; tested on 4 others.",
@@ -142,7 +148,8 @@ def _place(account: str, kind: str, owner: str, country: str) -> dict:
     rng = random.Random(account)
     angle, radius = rng.uniform(0, 6.283), rng.uniform(0.004, 0.05)  # about 0.5 to 5 km
     return {"id": account, "kind": kind, "owner": owner, "country": country, "city": city,
-            "currency": currency, "iban": f"{country}{rng.randint(10, 99)} •••• {account[-4:].upper()}",
+            "currency": currency,
+            "iban": f"{country}{rng.randint(10, 99)} •••• {account[-4:].upper()}",
             "lng": round(lng + radius * 1.6 * math.cos(angle), 5),
             "lat": round(lat + radius * math.sin(angle), 5)}
 

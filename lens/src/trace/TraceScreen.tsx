@@ -1,31 +1,39 @@
-// Device 2: inside the network that makes the decision on device 1, traced live.
+// Device 2: the trace console. The decision the network on device 1 is making, traced live:
+// its inputs, the attribution graph of its circuit and backup route, any neuron's card, the
+// decision over time and a log of how it changed. Click a moment in the plot or the log to
+// replay it; switch a neuron off and device 1 runs without it.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { TopBar } from '../TopBar'
-import { useLink, type Message, type Scenario, type SceneMessage } from '../link'
+import { useLink, type LinkStatus, type Message, type Scenario, type SceneMessage } from '../link'
 import type { Net } from '../model/net'
-import { trace as traceDecision, type Route, type Trace } from '../model/trace'
+import { trace as traceDecision, type Trace } from '../model/trace'
 import { useModels } from '../model/useModels'
-import { drivers, Drivers, sentence, Timeline, WhatIf, type Moment } from './Analytics'
+import { sentence } from './Analytics'
 import { Network3D } from './Network3D'
-import { NetworkDiagram } from './NetworkDiagram'
+import {
+  CircuitGraph, DecisionLog, InputsPanel, NeuronCard, OUTPUT_COLOURS, Panel, Telemetry, type Moment,
+} from './panels'
 
-const HISTORY = 120 // decisions kept for the confidence timeline
-
+const HISTORY = 240 // about a minute of decisions at four a second
 const AGAINST: Record<Scenario, string> = {
   driving: 'the same moment on an empty road',
   aml: 'an average clear account',
 }
-const TITLES: Record<Scenario, string> = { driving: 'Self-driving car', aml: 'Money laundering check' }
+const NAMES: Record<Scenario, string> = { driving: 'driving policy', aml: 'aml account check' }
+const LINK_WORDS: Record<LinkStatus, string> = {
+  connecting: 'connecting', alone: 'waiting for simulation', paired: 'paired', offline: 'relay offline',
+}
 
 export function TraceScreen({ room }: { room: string }) {
   const { models, error } = useModels()
   const [scenario, setScenario] = useState<Scenario>('driving')
   const [scenes, setScenes] = useState<Partial<Record<Scenario, SceneMessage>>>({})
-  const [held, setHeld] = useState<SceneMessage | null>(null)
+  const [held, setHeld] = useState<Moment | null>(null)
   const [off, setOff] = useState<Record<Scenario, string[]>>({ driving: [], aml: [] })
-  const [view, setView] = useState<'3d' | 'flat'>(() => (hasWebGL() ? '3d' : 'flat'))
   const [history, setHistory] = useState<Record<Scenario, Moment[]>>({ driving: [], aml: [] })
+  const [log, setLog] = useState<Record<Scenario, Moment[]>>({ driving: [], aml: [] })
+  const [selected, setSelected] = useState<string | null>(null)
+  const [view, setView] = useState<'graph' | '3d'>('graph')
 
   const onMessage = useCallback((m: Message) => {
     if (m.type === 'scenario') setScenario(m.scenario)
@@ -36,20 +44,38 @@ export function TraceScreen({ room }: { room: string }) {
 
   const net: Net | null = models ? models[scenario] : null
   const live = scenes[scenario]
-  const scene = held && held.scenario === scenario ? held : live
+  const scene = held ?? live
   const offSet = useMemo(() => new Set(off[scenario]), [off, scenario])
   const t: Trace | null = useMemo(() => (net && scene
     ? traceDecision(net, scene.x, scene.reference, { nodes: offSet }) : null), [net, scene, offSet])
 
-  const found = useMemo(() => (net && scene && t
-    ? drivers(net, scene.x, scene.reference, { nodes: offSet }) : []), [net, scene, t, offSet])
-
-  // Each new decision joins the timeline (not while a moment is held).
+  // Record each live decision; log it when the decision or its reason changes.
   useEffect(() => {
-    if (!t || held || !scene) return
-    setHistory((h) => ({ ...h, [scenario]: [...h[scenario], { at: scene.at, probs: t.run.probs,
-      choice: t.choice }].slice(-HISTORY) }))
-  }, [t, held, scene, scenario])
+    if (!net || !live || held) return
+    const lt = traceDecision(net, live.x, live.reference, { nodes: offSet })
+    const m: Moment = { at: live.at, x: live.x, reference: live.reference, title: live.title,
+      context: live.context, probs: lt.run.probs, choice: lt.choice, margin: lt.margin,
+      cause: lt.circuit ? lt.circuit.evidence.join(' + ') : 'nothing unusual',
+      backup: lt.backup ? lt.backup.evidence.join(' + ') : '' }
+    setHistory((h) => ({ ...h, [scenario]: [...h[scenario], m].slice(-HISTORY) }))
+    setLog((l) => {
+      const prev = l[scenario][l[scenario].length - 1]
+      if (prev && prev.choice === m.choice && prev.cause === m.cause && prev.backup === m.backup) return l
+      return { ...l, [scenario]: [...l[scenario], m].slice(-60) }
+    })
+  }, [net, live, held, offSet, scenario])
+
+  // A new scenario is a different network: its neurons share ids, not meaning.
+  useEffect(() => { setSelected(null); setHeld(null) }, [scenario])
+
+  // Open the strongest neuron of the circuit unless one is already chosen.
+  useEffect(() => {
+    if (!t?.circuit) return
+    if (selected && net?.neurons.some((n) => n.id === selected)) return
+    const top = [...t.circuit.hidden].sort((a, b) =>
+      Math.abs(t.nodeAttr[b] ?? 0) - Math.abs(t.nodeAttr[a] ?? 0))[0]
+    if (top) setSelected(top)
+  }, [t, selected, net])
 
   const setNodes = (nodes: string[]) => {
     setOff((o) => ({ ...o, [scenario]: nodes }))
@@ -57,199 +83,79 @@ export function TraceScreen({ room }: { room: string }) {
   }
   const toggle = (id: string) =>
     setNodes(offSet.has(id) ? [...offSet].filter((n) => n !== id) : [...offSet, id])
+  const pick = (m: Moment) => setHeld(m)
+
+  const decision = net && t ? net.outputs[t.choice] : null
 
   return (
-    <>
-      <TopBar room={room} link={link} role="Inside the model">
-        <strong>{TITLES[scenario]}</strong>
-        {scene && (
-          <button type="button" className={held ? 'primary' : undefined}
-            onClick={() => setHeld(held ? null : scene)}>
-            {held ? 'Back to live' : 'Hold this moment'}</button>
+    <div className="console">
+      <header className="strip">
+        <a href="#/" className="brand">LATTICE LENS</a>
+        <span className="seg">{NAMES[scenario]}</span>
+        <span className={`seg state ${held ? 'held' : 'live'}`}>{held ? 'REPLAY' : 'LIVE'}</span>
+        {scene && <span className="seg mono">
+          {new Date(scene.at).toLocaleTimeString('en-GB', { hour12: false })}</span>}
+        {decision && t && (
+          <span className="seg decision" style={{ color: OUTPUT_COLOURS[decision.id] }}>
+            {decision.label.toUpperCase()} <span className="mono">{t.run.probs[t.choice].toFixed(2)}</span>
+          </span>
         )}
-      </TopBar>
-      {error && <p className="banner" role="alert">{error}</p>}
+        {net && t && <span className="seg said">{sentence(net, t, AGAINST[scenario])}</span>}
+        <span className="grow" />
+        {held && <button type="button" className="btn" onClick={() => setHeld(null)}>Back to live</button>}
+        <span className={`seg link ${link.status}`}><i />{LINK_WORDS[link.status]} · {room}</span>
+      </header>
+
+      {error && <p className="console-msg">{error}</p>}
       {(!net || !scene || !t) ? (
-        <div className="waiting">
-          <h2>Waiting for the simulation</h2>
-          <p className="muted">Open the simulation on the other device with room code{' '}
-            <code>{room}</code>. Its decisions appear here as they happen.</p>
-        </div>
+        <p className="console-msg">Waiting for the simulation. Open it on the other device with room
+          code <span className="mono">{room}</span>.</p>
       ) : (
-        <div className="trace">
-          <header className="headline">
-            <Gauge p={t.run.probs[t.choice]} />
-            <div>
-              <p className="decided">{scene.title}: <strong>{net.outputs[t.choice].label}</strong></p>
-              <p className="said">{sentence(net, t, AGAINST[scenario])}</p>
-              <p className="muted">{held ? 'Held moment. ' : 'Live. '}{scene.context.join(' · ')}</p>
+        <div className="grid">
+          <Panel title="inputs" area="inputs"
+            aside={<span className="dim">vs {scenario === 'driving' ? 'empty road' : 'avg clear account'}</span>}>
+            <p className="scene-title">{scene.title}</p>
+            <InputsPanel net={net} t={t} x={scene.x} reference={scene.reference} />
+            <ul className="context">{scene.context.map((c) => <li key={c}>{c}</li>)}</ul>
+          </Panel>
+
+          <Panel area="graph" title={view === 'graph' ? 'attribution graph' : 'network, 3d'}
+            aside={
+              <span className="tabs" role="group" aria-label="Graph view">
+                <button type="button" aria-pressed={view === 'graph'} onClick={() => setView('graph')}>
+                  circuit</button>
+                <button type="button" aria-pressed={view === '3d'} onClick={() => setView('3d')}>3d</button>
+              </span>
+            }>
+            {view === 'graph'
+              ? <CircuitGraph net={net} t={t} selected={selected} off={offSet} onSelect={setSelected} />
+              : <Network3D net={net} trace={t} off={offSet} onToggle={toggle} />}
+            <div className="graph-legend">
+              <span className="k circuit">circuit: {t.circuit?.evidence.join(' + ') ?? 'none'}</span>
+              <span className="k backup">backup: {t.backup?.evidence.join(' + ') ?? 'none'}</span>
+              {t.circuit && t.circuit.fired.length > 0 && (
+                <button type="button" className="btn danger"
+                  onClick={() => setNodes([...new Set([...offSet, ...t.circuit!.fired])])}>
+                  ablate circuit detectors</button>
+              )}
+              {offSet.size > 0 && <button type="button" className="btn" onClick={() => setNodes([])}>
+                restore all ({offSet.size} off)</button>}
             </div>
-          </header>
-          <main className="trace-main">
-            <div className="view-switch" role="group" aria-label="Network view">
-              <button type="button" aria-pressed={view === '3d'} onClick={() => setView('3d')}>3D</button>
-              <button type="button" aria-pressed={view === 'flat'} onClick={() => setView('flat')}>Flat</button>
-            </div>
-            {view === '3d'
-              ? <Network3D net={net} trace={t} off={offSet} onToggle={toggle} />
-              : <NetworkDiagram net={net} trace={t} off={offSet} onToggle={toggle} />}
-            <p className="legend">
-              <span>The circuit: the fewest neurons that make this decision</span>
-              <span className="k-backup">The backup route, if the circuit is switched off</span>
-              <span className="k-push">Pushes toward the decision</span>
-              <span className="k-against">Pushes against it</span>
-            </p>
-          </main>
-          <aside className="explain">
-            <section>
-              <h3>What drove this decision</h3>
-              <Drivers net={net} list={found} choice={t.choice} />
-            </section>
-            <section>
-              <h3>How sure it has been</h3>
-              <Timeline net={net} moments={history[scenario]} />
-            </section>
-            <section>
-              <h3>What would change its mind</h3>
-              <WhatIf key={`${scenario}-${scene.at}`} net={net} x={scene.x} t={t}
-                base={{ nodes: offSet }} />
-            </section>
-            <Explanation net={net} t={t} scenario={scenario} off={offSet} setNodes={setNodes} />
-          </aside>
+          </Panel>
+
+          <Panel area="neuron" title={selected ? `neuron ${selected}` : 'neuron'}>
+            <NeuronCard net={net} t={t} id={selected} off={offSet} onToggle={toggle} />
+          </Panel>
+
+          <Panel area="plots" title="telemetry">
+            <Telemetry net={net} moments={history[scenario]} held={held?.at ?? null} onPick={pick} />
+          </Panel>
+
+          <Panel area="log" title="decision log">
+            <DecisionLog net={net} entries={log[scenario]} held={held?.at ?? null} onPick={pick} />
+          </Panel>
         </div>
       )}
-    </>
+    </div>
   )
-}
-
-// How sure it is, as a ring.
-function Gauge({ p }: { p: number }) {
-  const r = 26
-  const c = 2 * Math.PI * r
-  return (
-    <svg className="gauge" viewBox="0 0 64 64" role="img" aria-label={`${Math.round(p * 100)}% sure`}>
-      <circle cx="32" cy="32" r={r} fill="none" stroke="#dee6dc" strokeWidth="7" />
-      <circle cx="32" cy="32" r={r} fill="none" stroke="#a3233a" strokeWidth="7"
-        strokeDasharray={`${c * p} ${c}`} transform="rotate(-90 32 32)" strokeLinecap="round" />
-      <text x="32" y="37" textAnchor="middle" className="gauge-num">{Math.round(p * 100)}%</text>
-    </svg>
-  )
-}
-
-function hasWebGL(): boolean {
-  try {
-    return !!document.createElement('canvas').getContext('webgl2')
-  } catch {
-    return false
-  }
-}
-
-function Explanation({ net, t, scenario, off, setNodes }: {
-  net: Net; t: Trace; scenario: Scenario; off: ReadonlySet<string>; setNodes: (n: string[]) => void
-}) {
-  const label = (id: string) => net.neurons.find((n) => n.id === id)?.label ?? id
-  const decision = net.outputs[t.choice].label
-  const evidence = (r: Route) => cap(r.evidence.join(' and '))
-  const switchOff = (r: Route) => setNodes([...new Set([...off, ...r.fired])])
-  const thing = scenario === 'driving' ? 'scene' : 'account'
-
-  return (
-    <>
-      {t.reference.choice === t.choice ? (
-        <section>
-          <h3>Nothing out of the ordinary</h3>
-          <p className="muted">The network decides <strong>{decision}</strong> here, the same as it
-            does for {AGAINST[scenario]}. There is no circuit to show until something in the
-            {' '}{thing} changes the decision.</p>
-        </section>
-      ) : !t.circuit ? (
-        <section>
-          <h3>No small circuit</h3>
-          <p className="muted">The decision differs from {AGAINST[scenario]}, but no smaller part
-            of the {thing} reproduces it on its own.</p>
-        </section>
-      ) : (
-        <>
-          <section className="route first">
-            <h3>Why {decision}: the circuit</h3>
-            <p className="muted">On this evidence alone, with everything else as on
-              {' '}{AGAINST[scenario]}, the network still decides {decision}
-              {' '}(margin {t.circuit.margin.toFixed(1)}):</p>
-            <p><strong>{evidence(t.circuit)}</strong></p>
-            <Neurons r={t.circuit} label={label} />
-            {t.circuit.fired.length > 0 ? (
-              <button type="button" className="seal" onClick={() => switchOff(t.circuit!)}>
-                Switch off the {t.circuit.fired.length === 1 ? 'detector' : `${t.circuit.fired.length} detectors`}
-                {' '}it fires</button>
-            ) : (
-              <p className="muted">This route works by silencing neurons, so there is no detector
-                here to switch off.</p>
-            )}
-          </section>
-          {t.backup ? (
-            <section className="route second">
-              <h3>The backup route</h3>
-              <p className="muted">The rest of the {thing} is a second, separate reason for
-                {' '}{decision} (margin {t.backup.margin.toFixed(1)}):</p>
-              <p><strong>{evidence(t.backup)}</strong></p>
-              <Neurons r={t.backup} label={label} />
-              <p className="muted">Reading the circuit alone, you would not know it exists. Switch
-                the circuit's detectors off and the {scenario === 'driving' ? 'car' : 'bank'} still
-                {' '}decides {decision}, through this.</p>
-            </section>
-          ) : (
-            <section className="route">
-              <h3>No backup route</h3>
-              <p className="muted">Nothing else in the {thing} gives {decision} on its own. Take
-                away the circuit's evidence and the decision changes: it is essential here.</p>
-            </section>
-          )}
-        </>
-      )}
-      <section>
-        <h3>Switched off</h3>
-        {off.size === 0 ? <p className="muted">Nothing. Click a neuron in the drawing to switch it
-          off; the {scenario === 'driving' ? 'car' : 'bank'} on the other device runs without it.</p> : (
-          <>
-            <ul className="facts">{[...off].map((n) => <li key={n}>{label(n)}</li>)}</ul>
-            <button type="button" onClick={() => setNodes([])}>Switch everything back on</button>
-          </>
-        )}
-      </section>
-      <section>
-        <h3>About this network</h3>
-        <p className="muted">{net.notes} {net.sizes.slice(1, -1).reduce((a, b) => a + b, 0)} hidden
-          neurons. {metric(net)}</p>
-      </section>
-    </>
-  )
-}
-
-// "quiet when pedestrian in the path (3 neurons)" rather than the same line three times.
-// A route's neurons by what it does to them: the detectors it switches on, the ones it quiets,
-// and how many later neurons combine them.
-function Neurons({ r, label }: { r: Route; label: (id: string) => string }) {
-  return (
-    <ul>
-      {r.fired.length > 0 && <li>switches on: {grouped(r.fired.map(label)).join('; ')}</li>}
-      {r.silenced.length > 0 && <li>quiets: {grouped(r.silenced.map(label)).join('; ')}</li>}
-      {r.combined.length > 0 && <li>combined in {r.combined.length} neuron
-        {r.combined.length === 1 ? '' : 's'} of the next layer</li>}
-    </ul>
-  )
-}
-
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
-
-function grouped(labels: string[]): string[] {
-  const counts = new Map<string, number>()
-  for (const l of labels) counts.set(l, (counts.get(l) ?? 0) + 1)
-  return [...counts].map(([l, n]) => (n > 1 ? `${l} (${n} neurons)` : l))
-}
-
-function metric(net: Net): string {
-  const m = net.metrics as Record<string, number>
-  if (m.agreement_with_expert) return `Agrees with the expert driver ${Math.round(m.agreement_with_expert * 1000) / 10}% of the time on situations it never saw.`
-  if (m.accuracy) return `${Math.round(m.accuracy * 1000) / 10}% correct on accounts from worlds it never saw.`
-  return ''
 }

@@ -279,3 +279,27 @@ def dataset(seeds: list[int], background_per_world: int = 120) -> tuple[np.ndarr
             xs.append(account_features(ledger, a, when))
             ys.append(CLASS["clear"])
     return np.array(xs), np.array(ys)
+
+
+def describe(row: np.ndarray) -> str:
+    """One account in words, for the neuron cards: what an investigator would notice."""
+    f = dict(zip([x.id for x in INPUTS], row, strict=True))
+    count = lambda v, scale: round(math.expm1(v * math.log1p(scale)))  # noqa: E731
+    parts = [f"{count(f['in_count'], 30)} in / {count(f['out_count'], 30)} out"]
+    if f["forward_ratio"] > 0.5:
+        parts.append(f"passes on {round(f['forward_ratio'] * 100)}%")
+    if f["fast_forward"] > 0.5:
+        parts.append("within a day")
+    if f["chain_depth"] > 0:
+        parts.append(f"chain of {round(f['chain_depth'] * MAX_DEPTH)}")
+    if f["cycle"] > 0.5:
+        parts.append("money returns")
+    if f["near_threshold"] > 0:
+        parts.append(f"{round(f['near_threshold'] * 8)} near-limit deposits")
+    if f["shared_device"] > 0:
+        parts.append(f"{round(f['shared_device'] * 5)} on shared devices")
+    if f["new_account"] > 0.8:
+        parts.append("new account")
+    if f["to_exit"] > 0.5:
+        parts.append("to exchange")
+    return " · ".join(parts)

@@ -6,8 +6,12 @@ import maplibregl, { type GeoJSONSource, type Map as MapLibre } from 'maplibre-g
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useEffect, useRef, type RefObject } from 'react'
 
-import { colourAt, rel, ROAD_WIDTH, type Colour, type RouteMap, type World } from './driving'
+import {
+  between, colourAt, rel, ROAD_WIDTH, type Colour, type Physics, type RouteMap, type World,
+} from './driving'
 import { box, collection, feature, offset, poseAt, type LngLat } from './geo'
+import { drawBoxes, seen as detect, type Box as Detection } from './perception'
+import type { Camera } from './PhotoCity'
 
 const STYLE = 'https://tiles.openfreemap.org/styles/liberty'
 const LANE = -1.9 // the car's lane: left of the road's centre line
@@ -20,10 +24,16 @@ interface Props {
   world: RefObject<World>
   map: RouteMap
   forced: RefObject<Map<number, Colour>>
+  tick: number // seconds per simulation step, for drawing between steps
+  physics: Physics
+  camera: Camera
 }
 
-export function CityMap({ world, map, forced }: Props) {
+export function CityMap({ world, map, forced, tick, physics, camera }: Props) {
   const container = useRef<HTMLDivElement>(null)
+  const boxes = useRef<HTMLDivElement>(null)
+  const cam = useRef(camera)
+  cam.current = camera
   const night = useRef(false)
 
   useEffect(() => {
@@ -31,7 +41,7 @@ export function CityMap({ world, map, forced }: Props) {
     const start = poseAt(map, 0, 30)
     const m = new maplibregl.Map({
       container: container.current, style: STYLE, center: [start.lng, start.lat], zoom: 19.2,
-      pitch: 60, bearing: start.bearing, interactive: false,
+      pitch: 60, maxPitch: 85, bearing: start.bearing, interactive: false,
       // Keep the last frame readable, so screenshots and screen recordings of the demo work.
       canvasContextAttributes: { preserveDrawingBuffer: true },
       attributionControl: { compact: true },
@@ -41,6 +51,7 @@ export function CityMap({ world, map, forced }: Props) {
     let camera = { bearing: start.bearing }
     let last = performance.now()
 
+    if (import.meta.env.DEV) (window as unknown as { lensMap?: MapLibre }).lensMap = m // for debugging
     m.on('load', () => {
       addLayers(m, map)
       ready = true
@@ -54,12 +65,24 @@ export function CityMap({ world, map, forced }: Props) {
         const now = performance.now()
         const ease = 1 - Math.exp(-Math.min(now - last, 500) / 450)
         last = now
-        const look = poseAt(map, w.car.at, 30)
+        const alpha = Math.min(1, (now - (w.tickAt ?? now)) / (tick * 1000))
+        const carAt = between(w.car.prev, w.car.at, alpha, w.length)
+        const look = poseAt(map, carAt, 30)
         const turn = ((look.bearing - camera.bearing + 540) % 360) - 180
         camera = { bearing: (camera.bearing + turn * ease + 360) % 360 }
-        const centre = offset({ ...poseAt(map, w.car.at), bearing: camera.bearing }, 22, LANE)
-        m.jumpTo({ center: centre, bearing: camera.bearing })
-        draw(m, map, w, forced.current ?? undefined)
+        const mode = cam.current ?? 'front'
+        const here = { ...poseAt(map, carAt), bearing: camera.bearing }
+        if (mode === 'chase') {
+          m.jumpTo({ center: offset(here, 22, LANE), bearing: camera.bearing, pitch: 60, zoom: 19.2 })
+        } else {
+          // A driver's-eye view: the map's camera low and steep, just behind the car's own position.
+          const back = mode === 'rear'
+          const facing = back ? (camera.bearing + 180) % 360 : camera.bearing
+          m.jumpTo({ center: offset(here, back ? -24 : 24, LANE), bearing: facing, pitch: 74, zoom: 20.1 })
+        }
+        draw(m, map, w, alpha, mode, forced.current ?? undefined)
+        drawBoxes(boxes.current, mode === 'chase' ? [] : detections(m, map, w, physics, carAt,
+          forced.current ?? undefined))
         if (night.current !== w.night) {
           night.current = w.night
           container.current?.classList.toggle('night', w.night)
@@ -75,8 +98,13 @@ export function CityMap({ world, map, forced }: Props) {
     }
   }, [map, world, forced])
 
-  return <div ref={container} className="city-map" role="img"
-    aria-label={`A 3D map of ${map.name}, following the car`} />
+  return (
+    <div className="city-wrap">
+      <div ref={container} className="city-map" role="img"
+        aria-label={`A 3D map of ${map.name}, from the car's ${camera} camera`} />
+      <div ref={boxes} className="perception" aria-hidden="true" />
+    </div>
+  )
 }
 
 function addLayers(m: MapLibre, map: RouteMap) {
@@ -105,7 +133,8 @@ function addLayers(m: MapLibre, map: RouteMap) {
   solid('brake', '#ff2d3f', 0.7, 1.1)
 }
 
-function draw(m: MapLibre, map: RouteMap, w: World, forced?: Map<number, Colour>) {
+function draw(m: MapLibre, map: RouteMap, w: World, alpha: number, mode: Camera,
+  forced?: Map<number, Colour>) {
   const near = (at: number) => { const d = rel(w, at); return d > -DRAW_BEHIND && d < DRAW_AHEAD }
   const set = (id: string, data: ReturnType<typeof collection>) =>
     (m.getSource(id) as GeoJSONSource | undefined)?.setData(data)
@@ -127,7 +156,7 @@ function draw(m: MapLibre, map: RouteMap, w: World, forced?: Map<number, Colour>
     return feature(box(poseAt(map, x.crosswalk, 6), 0.7, 0.7, across))
   })))
 
-  const car = poseAt(map, w.car.at, 6)
+  const car = poseAt(map, between(w.car.prev, w.car.at, alpha, w.length), 6)
   // What the car can see: 120 m of road ahead, drawn as a fan following the route.
   const left: LngLat[] = []
   const right: LngLat[] = []
@@ -138,14 +167,46 @@ function draw(m: MapLibre, map: RouteMap, w: World, forced?: Map<number, Colour>
     right.push(offset(p, 0, LANE + half))
   }
   set('sensor', collection([feature([...left, ...right.reverse(), left[0]])]))
-  const cars = [feature(box(car, 4.6, 1.9, LANE), { color: '#2f6fed' })]
-  if (w.lead && near(w.lead.at)) {
-    cars.push(feature(box(poseAt(map, w.lead.at, 6), 4.6, 1.9, LANE), { color: '#7d8799' }))
+  // From its own cameras the car is not in view; in the chase view it is.
+  const cars = mode === 'chase' ? [feature(box(car, 4.6, 1.9, LANE), { color: '#2f6fed' })] : []
+  for (const v of w.traffic.filter((o) => near(o.at))) {
+    const p = poseAt(map, between(v.prev, v.at, alpha, w.length), 6)
+    const facing = v.lane === 1 ? p : { ...p, bearing: (p.bearing + 180) % 360 }
+    cars.push(feature(box(facing, v.length, 1.85, LANE), { color: v.color })) // keep left
+  }
+  // Cross traffic at the junction ahead, while our light is red.
+  for (const c of w.cross) {
+    const j = poseAt(map, c.junction + 8, 10)
+    const [lng, lat] = offset(j, 0, c.prevX + (c.x - c.prevX) * alpha)
+    const side = { lng, lat, bearing: (j.bearing + (c.dir === 1 ? 90 : 270)) % 360 }
+    cars.push(feature(box(side, 4.5, 1.85, -1.9), { color: c.color }))
   }
   set('cars', collection(cars))
   const braking = w.action === 2
-  set('brake', collection(braking ? [-0.6, 0.6].map((r) =>
+  set('brake', collection(braking && mode === 'chase' ? [-0.6, 0.6].map((r) =>
     feature(box(car, 0.3, 0.5, LANE + r, -2.35))) : []))
 }
 
 export type { LngLat }
+
+// The detections, projected onto the map view. The map has no camera height to project with, so
+// each box's size comes from its distance: the way an object shrinks with distance in any camera.
+function detections(m: MapLibre, map: RouteMap, w: World, physics: Physics, carAt: number,
+  forced?: Map<number, Colour>): Detection[] {
+  const canvas = m.getCanvas()
+  const focal = (canvas.clientHeight / 2) / Math.tan((36.87 / 2) * (Math.PI / 180))
+  const out: Detection[] = []
+  for (const o of detect(w, physics, forced)) {
+    const d = rel(w, o.s) - (carAt - w.car.at)
+    if (d < 4) continue
+    const p = poseAt(map, o.s, 6)
+    const [lng, lat] = offset(p, 0, o.right)
+    const pt = m.project([lng, lat])
+    if (pt.x < -50 || pt.x > canvas.clientWidth + 50 || pt.y < 0 || pt.y > canvas.clientHeight + 300) continue
+    const scale = focal / (d + 24) // the map's camera sits behind the car's position
+    const h = o.height * scale
+    out.push({ key: o.key, kind: o.kind, x: pt.x, y: pt.y - o.base * scale, w: o.width * scale, h,
+      label: o.label, used: o.used })
+  }
+  return out
+}

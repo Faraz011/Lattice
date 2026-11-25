@@ -184,3 +184,23 @@ def concepts(x: np.ndarray) -> dict[str, np.ndarray]:
         out["at cruising speed"].append(target - 0.04 <= speed <= target + 0.08)
         out["rain"].append(rain)
     return {k: np.array(v) for k, v in out.items()}
+
+
+def describe(row: np.ndarray) -> str:
+    """One situation in words, for the neuron cards: what a driver would notice."""
+    parts = [f"{round(row[IDX['speed']] * PHYSICS['vmax_ms'] * 3.6)} km/h"]
+    to = lambda near: round((1 - near) * PHYSICS["view_m"])  # noqa: E731
+    for colour in ("red", "yellow", "green"):
+        if row[IDX[f"light_{colour}"]] > 0.5:
+            parts.append(f"{colour} light {to(row[IDX['light_near']])} m")
+    if row[IDX["ped_crossing"]] > 0.5:
+        parts.append(f"person crossing {to(row[IDX['crosswalk_near']])} m")
+    elif row[IDX["ped_waiting"]] > 0.5:
+        parts.append(f"person waiting {to(row[IDX['crosswalk_near']])} m")
+    if row[IDX["lead_car"]] > 0.5:
+        parts.append(f"car ahead {to(row[IDX['lead_near']])} m")
+    if row[IDX["rain"]] > 0.5:
+        parts.append("rain")
+    if row[IDX["night"]] > 0.5:
+        parts.append("night")
+    return " · ".join(parts)

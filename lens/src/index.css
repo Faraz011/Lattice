@@ -234,3 +234,171 @@ button.quiet { border-color: transparent; text-decoration: underline; }
   .headline { flex-direction: column; align-items: flex-start; }
   .net3d { height: 26rem; }
 }
+
+/* ---- the photorealistic city ---- */
+.city-map.photo .cesium-viewer-bottom { display: block; }
+.city-map.photo .cesium-widget-credits { font-size: 0.6875rem; }
+.photo-note { position: absolute; top: 0.75rem; left: 0.75rem; right: 0.75rem; background: rgba(246,248,243,0.92);
+  padding: 0.375rem 0.625rem; border-radius: 4px; font-size: var(--step--1); }
+
+/* ---- the car's cameras and what they detect ---- */
+.city-wrap { position: absolute; inset: 0; }
+.perception { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.det { position: absolute; left: 0; top: 0; border: 1.5px dashed rgba(120, 220, 255, 0.75); border-radius: 3px; }
+.det span { position: absolute; left: -1.5px; bottom: 100%; white-space: nowrap; font: 600 11px/1.3 var(--sans);
+  color: #0b1220; background: rgba(120, 220, 255, 0.85); padding: 0 4px; border-radius: 2px 2px 0 0; }
+.det.used { border-style: solid; border-width: 2.5px; }
+.det.pedestrian { border-color: rgba(255, 196, 61, 0.9); }
+.det.pedestrian span { background: rgba(255, 196, 61, 0.95); }
+.det.red { border-color: #ff4d64; } .det.red span { background: #ff4d64; color: #fff; }
+.det.yellow { border-color: #ffc21a; } .det.yellow span { background: #ffc21a; }
+.det.green { border-color: #2ee07a; } .det.green span { background: #2ee07a; }
+.loading-note { display: none; }
+.city-map.loading + .perception + .loading-note { display: block; position: absolute; left: 50%; top: 45%;
+  translate: -50% 0; background: rgba(20,26,40,0.8); color: #f6f8f3; padding: 0.5rem 1rem; border-radius: 6px; }
+.cams { position: absolute; top: 0.75rem; right: 0.75rem; display: inline-flex; border-radius: 4px; overflow: hidden;
+  border: 1px solid rgba(246,248,243,0.6); z-index: 3; }
+.cams button { border: 0; border-radius: 0; background: rgba(20,26,40,0.72); color: #e8ecf4; }
+.cams button[aria-pressed='true'] { background: #f6f8f3; color: var(--ink); }
+.cam-label { position: absolute; top: 0.85rem; left: 0.9rem; z-index: 3; font: 700 11px var(--sans); letter-spacing: 0.04em;
+  color: #fff; background: rgba(163,35,58,0.85); padding: 0.15rem 0.45rem; border-radius: 3px; }
+
+/* ---- Street View ---- */
+.city-map.street { background: #2a2f3a; }
+.city-map.street canvas { display: block; width: 100%; height: 100%; }
+.street-credit { position: absolute; right: 0.5rem; bottom: 0.35rem; z-index: 3; font-size: 0.6875rem; color: #fff;
+  text-shadow: 0 1px 2px #000; margin: 0; }
+.street-credit strong { font-weight: 700; letter-spacing: 0.01em; }
+.sim-markers .det { border-style: dashed; background: rgba(120, 220, 255, 0.08); }
+.sim-markers .det.used { border-style: solid; background: rgba(255, 255, 255, 0.1); }
+.sim-markers .det span::before { content: 'sim · '; opacity: 0.75; }
+
+/* ---- the trace console: an engineering tool, dense and quiet; colour only means something ---- */
+.console {
+  --c-bg: #15171b; --c-panel: #1b1e23; --c-line: #2b2f37; --c-text: #cfd4dc; --c-dim: #858c99;
+  --c-brake: #ff5a5f; --c-warn: #f0a82e; --c-go: #3ecf8e; --c-info: #5aa9ff;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 13px; color: var(--c-text);
+  background: var(--c-bg); min-height: 100vh; display: flex; flex-direction: column;
+}
+.console .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.console .dim, .console .muted-mono { color: var(--c-dim); }
+.console .muted-mono { font-family: var(--mono); font-size: 11px; }
+.strip { display: flex; align-items: center; height: 36px; border-bottom: 1px solid var(--c-line);
+  background: #111317; white-space: nowrap; overflow: hidden; }
+.strip .brand { color: var(--c-text); text-decoration: none; font-weight: 700; letter-spacing: 0.08em;
+  font-size: 11px; padding: 0 14px; }
+.strip .seg { padding: 0 12px; border-left: 1px solid var(--c-line); line-height: 36px; font-size: 12px; }
+.strip .state.live { color: var(--c-go); font-weight: 600; }
+.strip .state.live::before { content: '\25CF  '; }
+.strip .state.held { color: var(--c-warn); font-weight: 600; }
+.strip .decision { font-weight: 700; letter-spacing: 0.04em; }
+.strip .said { color: var(--c-dim); overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1; }
+.strip .grow { flex: 1; }
+.strip .link i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--c-dim);
+  margin-right: 6px; }
+.strip .link.paired i { background: var(--c-go); }
+.strip .link.offline i { background: var(--c-brake); }
+.console .btn { font: 500 12px 'IBM Plex Sans', sans-serif; color: var(--c-text); background: #252a32;
+  border: 1px solid #3a404b; border-radius: 3px; padding: 3px 10px; cursor: pointer; }
+.console .btn:hover { background: #2d333d; }
+.console .btn.on { background: var(--c-brake); border-color: var(--c-brake); color: #fff; }
+.console .btn.danger { border-color: #7a2c31; color: #ffb3b6; }
+.console-msg { padding: 24px; color: var(--c-dim); }
+.console .grid { flex: 1; display: grid; gap: 1px; background: var(--c-line); min-height: 0;
+  grid-template-columns: 330px minmax(0, 1fr) 360px; grid-template-rows: minmax(0, 1fr) 240px;
+  grid-template-areas: "inputs graph neuron" "plots plots log"; height: calc(100vh - 37px); }
+.panel { background: var(--c-panel); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.panel > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 28px;
+  padding: 0 10px; border-bottom: 1px solid var(--c-line); flex: none; }
+.panel > header h2 { font: 600 11px 'IBM Plex Sans', sans-serif; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--c-dim); margin: 0; }
+.panel > header .dim { font-size: 11px; }
+.panel-body { overflow: auto; flex: 1; min-height: 0; padding: 8px 10px; }
+.console .empty { color: var(--c-dim); padding: 16px 4px; max-width: 46ch; }
+.scene-title { font-weight: 600; margin: 0 0 6px; }
+.inputs { width: 100%; border-collapse: collapse; font-size: 12px; }
+.inputs th { text-align: left; font-weight: 500; color: var(--c-dim); font-size: 11px; padding: 2px 4px;
+  border-bottom: 1px solid var(--c-line); }
+.inputs td { padding: 3px 4px; border-bottom: 1px solid #22252b; font-family: var(--mono); font-size: 11.5px; }
+.inputs .num, .log .num { text-align: right; }
+.inputs td.num { white-space: nowrap; }
+.inputs .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px;
+  border: 1px solid #3a404b; vertical-align: 1px; }
+.inputs tr.moved .dot { background: var(--c-dim); border-color: var(--c-dim); }
+.inputs tr.circuit .dot { background: var(--c-brake); border-color: var(--c-brake); }
+.inputs tr.backup .dot { background: var(--c-warn); border-color: var(--c-warn); }
+.inputs tr.circuit td:first-child { color: #ffd0d2; }
+.inputs .meter { display: inline-block; width: 34px; height: 5px; background: #2a2e36; margin-right: 6px;
+  vertical-align: 1px; }
+.inputs .meter span { display: block; height: 100%; background: #7d8797; }
+.inputs tr.circuit .meter span { background: var(--c-brake); }
+.inputs .pos { color: #ff9a9e; } .inputs .neg { color: #8fbfff; } .inputs .zero { color: #4a505b; }
+.context { list-style: none; padding: 0; margin: 10px 0 0; color: var(--c-dim); font-size: 12px; }
+.context li { padding: 2px 0; }
+.tabs { display: inline-flex; border: 1px solid #3a404b; border-radius: 3px; overflow: hidden; }
+.tabs button { font: 500 11px 'IBM Plex Sans', sans-serif; background: transparent; color: var(--c-dim);
+  border: 0; border-radius: 0; padding: 2px 10px; }
+.tabs button[aria-pressed='true'] { background: #2d333d; color: var(--c-text); }
+.panel-graph .panel-body { display: flex; flex-direction: column; }
+.graph { width: 100%; flex: 1; min-height: 240px; }
+.graph .col-head { fill: var(--c-dim); font: 500 10px 'IBM Plex Sans', sans-serif; letter-spacing: 0.06em;
+  text-transform: uppercase; }
+.graph .edge { fill: none; opacity: 0.85; }
+.graph .edge.circuit { stroke: var(--c-brake); }
+.graph .edge.backup { stroke: var(--c-warn); stroke-dasharray: 5 4; }
+.graph .node rect { fill: #22262d; stroke: #3a404b; stroke-width: 1; }
+.graph .node.circuit rect { stroke: var(--c-brake); }
+.graph .node.backup rect { stroke: var(--c-warn); stroke-dasharray: 4 3; }
+.graph .node.selected rect { fill: #2c323c; stroke-width: 2.5; }
+.graph .node.off rect { fill: #17191d; stroke: #555; }
+.graph .node.off .n-id { text-decoration: line-through; }
+.graph .node.pick { cursor: pointer; }
+.graph .n-id { fill: var(--c-text); font: 600 11px var(--mono); }
+.graph .n-val { fill: var(--c-text); font: 500 11px var(--mono); }
+.graph .n-sub { fill: var(--c-dim); font: 400 10px 'IBM Plex Sans', sans-serif; }
+.graph-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-top: 6px;
+  border-top: 1px solid var(--c-line); font-size: 12px; }
+.graph-legend .k::before { content: ''; display: inline-block; width: 16px; height: 0; margin-right: 6px;
+  vertical-align: 3px; }
+.graph-legend .k.circuit::before { border-top: 2px solid var(--c-brake); }
+.graph-legend .k.backup::before { border-top: 2px dashed var(--c-warn); }
+.panel-graph .net3d { flex: 1; height: auto; min-height: 280px; border-radius: 0; }
+.neuron .n-title { font-weight: 600; margin: 0 0 8px; }
+.neuron .n-title .mono { color: var(--c-dim); margin-right: 6px; }
+.kv { display: grid; grid-template-columns: 90px 1fr; gap: 3px 8px; margin: 0 0 10px; font-size: 12px; }
+.kv dt { color: var(--c-dim); }
+.kv dd { margin: 0; }
+.kv dd.circuit { color: var(--c-brake); }
+.kv dd.backup { color: var(--c-warn); }
+.hist { margin: 0 0 10px; }
+.hist figcaption, .sub-head { color: var(--c-dim); font-size: 11px; margin: 0 0 4px; }
+.hist svg { width: 100%; height: 46px; display: block; background: #16181c; }
+.hist .bin { fill: #4b5466; }
+.hist .now { stroke: var(--c-brake); stroke-width: 1.5; }
+.examples ol { margin: 0 0 12px; padding: 0; list-style: none; font-size: 12px; }
+.examples li { padding: 3px 0; border-bottom: 1px solid #22252b; }
+.examples li .mono { display: inline-block; width: 40px; color: var(--c-dim); }
+.telemetry { display: flex; flex-direction: column; height: 100%; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11px; color: var(--c-dim); margin-bottom: 4px; }
+.legend-row i { display: inline-block; width: 10px; height: 2px; margin-right: 5px; vertical-align: 3px; }
+.legend-row .margin-key { background: transparent; border-top: 1px dashed #aab2bf; }
+.plot { width: 100%; flex: 1; min-height: 110px; background: #16181c; cursor: crosshair; }
+.plot .grid { stroke: #262a31; stroke-width: 1; }
+.plot .series { fill: none; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.plot .series.margin { stroke: #aab2bf; stroke-dasharray: 3 3; }
+.plot .cursor { stroke: var(--c-warn); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.log { width: 100%; border-collapse: collapse; font-size: 11.5px; table-layout: fixed; }
+.log td { vertical-align: top; }
+.log td b { white-space: nowrap; }
+.log .backup-line { display: block; font-size: 11px; }
+.log th { text-align: left; color: var(--c-dim); font-weight: 500; font-size: 11px; padding: 2px 6px;
+  border-bottom: 1px solid var(--c-line); position: sticky; top: 0; background: var(--c-panel); }
+.log td { padding: 3px 6px; border-bottom: 1px solid #22252b; cursor: pointer; }
+.log tr:hover td { background: #20242a; }
+.log tr.held td { background: #2a2618; }
+@media (max-width: 1100px) {
+  .console .grid { grid-template-columns: 1fr; grid-template-rows: auto; height: auto;
+    grid-template-areas: "graph" "neuron" "inputs" "plots" "log"; }
+  .panel-graph .panel-body { min-height: 360px; }
+}

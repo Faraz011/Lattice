@@ -4,6 +4,9 @@
 // 13 numbers its network was trained on (src/lattice/lens/driving.py, INPUTS, same order and
 // meaning) and acts.
 import { forward, type Ablation, type Net } from '../model/net'
+import { leadOf, seedTraffic, stepTraffic, type CrossCar, type Vehicle } from './traffic'
+
+export { cutIn } from './traffic'
 
 export interface Physics {
   view_m: number
@@ -18,18 +21,19 @@ export type Colour = 'red' | 'yellow' | 'green'
 
 export interface Light { at: number; offset: number } // stop line position; cycle offset (s)
 export interface Pedestrian { id: number; crosswalk: number; x: number; speed: number; wait: number }
-export interface LeadCar { at: number; speed: number; target: number }
 export type Incident = { kind: 'red_light' | 'pedestrian' | 'collision'; at: number; time: number }
 
 export interface World {
   time: number
   length: number | null // a looping route's length; null for an endless straight road
   odometer: number // metres driven
-  car: { at: number; speed: number }
+  tickAt?: number // when the last step ran (performance.now()), for drawing between steps
+  car: { at: number; speed: number; prev: number } // prev: one tick ago, for smooth drawing
   lights: Light[]
   crosswalks: number[]
   pedestrians: Pedestrian[]
-  lead: LeadCar | null
+  traffic: Vehicle[] // other cars, in our lane and oncoming (traffic.ts)
+  cross: CrossCar[] // cars crossing a junction while our light is red
   rain: boolean
   night: boolean
   action: number
@@ -84,13 +88,25 @@ export function worldFromMap(map: RouteMap, seed = 1): World {
   for (const c of map.crossings) {
     if (!crosswalks.length || c.at - crosswalks[crosswalks.length - 1] > 12) crosswalks.push(c.at)
   }
-  return blank(lights, crosswalks, map.length_m)
+  const w = blank(lights, crosswalks, map.length_m)
+  seedTraffic(w, rand)
+  return w
 }
 
 function blank(lights: Light[], crosswalks: number[], length: number | null): World {
-  return { time: 0, length, odometer: 0, car: { at: 0, speed: 8 }, lights, crosswalks,
-    pedestrians: [], lead: null, rain: false, night: false, action: 1, probs: [0, 1, 0],
+  return { time: 0, length, odometer: 0, car: { at: 0, speed: 8, prev: 0 }, lights, crosswalks,
+    pedestrians: [], traffic: [], cross: [], rain: false, night: false, action: 1,
+    probs: [0, 1, 0],
     seen: null, incidents: [], nextId: 1 }
+}
+
+// A position drawn `alpha` of the way from where it was one tick ago to where it is now, the
+// short way round a looping route: what makes motion smooth between simulation steps.
+export function between(prev: number, at: number, alpha: number, length: number | null): number {
+  let d = at - prev
+  if (length && d > length / 2) d -= length
+  if (length && d < -length / 2) d += length
+  return prev + d * alpha
 }
 
 // How far `at` is ahead of the car: negative behind it. Around a loop, the nearer way round.
@@ -140,7 +156,7 @@ export function features(w: World, p: Physics, forced?: Map<number, Colour>): nu
   const colour = light ? colourAt(light, w.time, forced) : null
   const cw = nextCrosswalk(w, p)
   const peds = cw === null ? [] : w.pedestrians.filter((x) => x.crosswalk === cw)
-  const lead = w.lead && ahead(w, w.lead.at, p.view_m) ? w.lead : null
+  const lead = leadOf(w, p.view_m)
   return [
     Math.min(1, w.car.speed / p.vmax_ms),
     colour === 'red' ? 1 : 0,
@@ -174,8 +190,9 @@ export function describe(w: World, p: Physics, forced?: Map<number, Colour>): st
       ? ', someone waiting' : ''
     out.push(`crosswalk in ${Math.round(rel(w, cw))} m${who}`)
   }
-  if (w.lead && ahead(w, w.lead.at, p.view_m)) {
-    out.push(`car ahead at ${Math.round(rel(w, w.lead.at))} m, ${Math.round(w.lead.speed * 3.6)} km/h`)
+  const lead = leadOf(w, p.view_m)
+  if (lead) {
+    out.push(`car ahead at ${Math.round(rel(w, lead.at))} m, ${Math.round(lead.speed * 3.6)} km/h`)
   }
   return out
 }
@@ -185,10 +202,6 @@ export function stepOut(w: World, p: Physics): void {
   const cw = w.crosswalks.find((c) => rel(w, c) > 25 && rel(w, c) < p.view_m)
   if (cw === undefined) return
   w.pedestrians.push({ id: w.nextId++, crosswalk: cw, x: -0.5, speed: 1.3, wait: 0.6 })
-}
-
-export function cutIn(w: World): void {
-  w.lead = { at: w.car.at + 30, speed: Math.max(3, w.car.speed * 0.45), target: 6 }
 }
 
 export function step(w: World, p: Physics, net: Net, ablation: Ablation,
@@ -207,6 +220,7 @@ export function step(w: World, p: Physics, net: Net, ablation: Ablation,
   const passes = (at: number) => { const d = rel(w, at); return d > 0 && d <= moved }
   const passedLights = w.lights.filter((l) => passes(l.at))
   const passedPeds = w.pedestrians.filter((ped) => passes(ped.crosswalk))
+  w.car.prev = w.car.at
   w.car.at += moved
   if (w.length) w.car.at %= w.length
   w.odometer += moved
@@ -233,17 +247,11 @@ export function step(w: World, p: Physics, net: Net, ablation: Ablation,
   // Now and then someone comes to a crosswalk ahead on their own.
   if (rand() < dt * 0.05) stepOut(w, p)
 
-  if (w.lead) {
-    const l = w.lead
-    if (l.target < 12 && Math.abs(l.speed - l.target) < 0.2 && rand() < dt * 0.15) l.target = 14
-    l.speed += Math.sign(l.target - l.speed) * Math.min(Math.abs(l.target - l.speed), 1.5 * dt)
-    l.at += l.speed * dt
-    if (w.length) l.at %= w.length
-    if (rel(w, l.at) < 3 && w.car.speed > l.speed) {
-      w.incidents.push({ kind: 'collision', at: l.at, time: w.time })
-      w.car.speed = l.speed
-    }
-    if (rel(w, l.at) > p.view_m * 1.4) w.lead = null
+  stepTraffic(w, dt, forced, rand)
+  const lead = leadOf(w, p.view_m)
+  if (lead && rel(w, lead.at) - lead.length < 1 && w.car.speed > lead.speed) {
+    w.incidents.push({ kind: 'collision', at: lead.at, time: w.time })
+    w.car.speed = lead.speed
   }
   return x
 }
