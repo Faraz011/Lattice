@@ -38,7 +38,9 @@ export function DrivingStage({ net, route, off, send }: Props) {
   const [paused, setPaused] = useState(false)
   // Photorealistic London when a Cesium ion token is configured; the open map otherwise.
   const [photo, setPhoto] = useState((Boolean(ION_TOKEN) || TRY_PHOTO) && !FORCE_OPEN)
-  const [photoNote, setPhotoNote] = useState<string | null>(null)
+  // A view that cannot load steps aside quietly for the next one; the reason goes to the
+  // browser console for whoever is setting the demo up, never onto the stage.
+  const fellBack = (view: string, why: string) => console.warn(`${view} unavailable, falling back:`, why)
   const [camera, setCamera] = useState<Camera>('front')
   // Google Street View for the car's own cameras, when a key is configured.
   const [street, setStreet] = useState(Boolean(STREET_KEY) && !FORCE_OPEN)
@@ -134,11 +136,11 @@ export function DrivingStage({ net, route, off, send }: Props) {
         {street && camera !== 'chase'
           ? <StreetCam world={world} map={route} forced={forced} tick={physics.tick_s}
               physics={physics} rear={camera === 'rear'}
-              onFail={(why) => { setPhotoNote(`Street View: ${why}`); setStreet(false) }} />
+              onFail={(why) => { fellBack('Street View', why); setStreet(false) }} />
           : photo
           ? <PhotoCity world={world} map={route} forced={forced} tick={physics.tick_s}
               physics={physics} camera={camera}
-              onFail={(why) => { setPhotoNote(why); setPhoto(false) }} />
+              onFail={(why) => { fellBack('Photorealistic 3D city', why); setPhoto(false) }} />
           : <CityMap world={world} map={route} forced={forced} tick={physics.tick_s}
               physics={physics} camera={camera} />}
         <span className="cam-label" aria-hidden="true">{CAMERA_NAMES[camera]}</span>
@@ -148,8 +150,6 @@ export function DrivingStage({ net, route, off, send }: Props) {
               {c === 'front' ? 'Front camera' : c === 'rear' ? 'Rear camera' : 'Chase view'}</button>
           ))}
         </div>
-        {photoNote && <p className="photo-note" role="status">Photorealistic view unavailable
-          ({photoNote}); showing the open map.</p>}
         <div className="hud" aria-hidden="true">
           <span className="speed">{Math.round(w.car.speed * 3.6)}<small>km/h</small></span>
           <span className={`act ${act}`}>{act}</span>
