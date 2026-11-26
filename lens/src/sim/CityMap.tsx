@@ -53,6 +53,13 @@ export function CityMap({ world, map, forced, tick, physics, camera }: Props) {
 
     if (import.meta.env.DEV) (window as unknown as { lensMap?: MapLibre }).lensMap = m // for debugging
     m.on('load', () => {
+      // From the street, the base map's road shields and point-of-interest icons repeat all
+      // along the road: keep only the names of places.
+      for (const layer of m.getStyle().layers ?? []) {
+        if (layer.type === 'symbol' && !/place|country|state|city|town|village/.test(layer.id)) {
+          m.setLayoutProperty(layer.id, 'visibility', 'none')
+        }
+      }
       addLayers(m, map)
       ready = true
     })

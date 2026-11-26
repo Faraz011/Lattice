@@ -485,3 +485,7 @@ body.console-page { background: #15171b; }
   .panel-graph .panel-body { min-height: 420px; }
   .panel-raster .panel-body, .panel-plots .panel-body { min-height: 180px; }
 }
+
+/* ---- the active view, and a way back to the 3D city ---- */
+.retry-3d { position: absolute; top: 2.6rem; left: 0.9rem; z-index: 3; font-size: 0.75rem; padding: 0.2rem 0.6rem;
+  background: rgba(246,248,243,0.92); border-color: rgba(30,41,66,0.5); }
