@@ -7,7 +7,7 @@ import {
 } from './driving'
 import { leadOf } from './traffic'
 
-export type Kind = 'car' | 'pedestrian' | 'red' | 'yellow' | 'green'
+export type Kind = 'car' | 'pedestrian' | 'red' | 'yellow' | 'green' | 'light-real' // a real light, colour unknown
 
 // An object in the world, in route terms: `s` metres along the route, `right` metres to the
 // right of the route's centre line (facing along the route), `height` metres tall.

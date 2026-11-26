@@ -20,3 +20,7 @@ services:
       # car's cameras show Google Street View. Without it they show the 3D city.
       - key: VITE_GOOGLE_MAPS_KEY
         sync: false
+      # Free Mapillary client token (mapillary.com > Developers > register an app): the car's
+      # cameras show real street photos. Without it they show the 3D city.
+      - key: VITE_MAPILLARY_TOKEN
+        sync: false

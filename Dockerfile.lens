@@ -18,6 +18,9 @@ ENV VITE_CESIUM_ION_TOKEN=$VITE_CESIUM_ION_TOKEN
 # cameras show the 3D city.
 ARG VITE_GOOGLE_MAPS_KEY=""
 ENV VITE_GOOGLE_MAPS_KEY=$VITE_GOOGLE_MAPS_KEY
+# The Mapillary client token for real street photos from the car's cameras (free).
+ARG VITE_MAPILLARY_TOKEN=""
+ENV VITE_MAPILLARY_TOKEN=$VITE_MAPILLARY_TOKEN
 RUN npm run build
 
 FROM python:3.11-slim

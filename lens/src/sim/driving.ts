@@ -100,6 +100,17 @@ function blank(lights: Light[], crosswalks: number[], length: number | null): Wo
     seen: null, incidents: [], nextId: 1 }
 }
 
+// Moves the car to `s` metres along the route, and the traffic with it, keeping every car's
+// distance from ours: how a looped stretch of road starts again.
+export function jumpTo(w: World, s: number): void {
+  const d = s - w.car.at
+  const wrap = (x: number) => (w.length ? ((x % w.length) + w.length) % w.length : x)
+  w.car.at = s
+  w.car.prev = s
+  for (const v of w.traffic) { v.at = wrap(v.at + d); v.prev = wrap(v.prev + d) }
+  w.cross = []
+}
+
 // A position drawn `alpha` of the way from where it was one tick ago to where it is now, the
 // short way round a looping route: what makes motion smooth between simulation steps.
 export function between(prev: number, at: number, alpha: number, length: number | null): number {

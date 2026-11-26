@@ -22,6 +22,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -64,6 +65,8 @@ class Rooms:
 
 def create_app(static: Path | None = None) -> FastAPI:
     app = FastAPI(title="Lattice Lens relay", docs_url=None, redoc_url=None)
+    # The street-photo list and the models are JSON of a megabyte or more: send them compressed.
+    app.add_middleware(GZipMiddleware, minimum_size=2048)
     rooms = Rooms()
 
     @app.get("/health")

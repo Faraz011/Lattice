@@ -7,9 +7,11 @@ import type { Net } from '../model/net'
 import { CityMap } from './CityMap'
 import { FORCE_OPEN, ION_TOKEN, PhotoCity, TRY_PHOTO, type Camera } from './PhotoCity'
 import { StreetCam } from './StreetCam'
+import { loadPhotoTrack, MapillaryCam, MAPILLARY_TOKEN, type PhotoTrack } from './MapillaryCam'
+import { ClipCam, loadDrives, type Drive } from './ClipCam'
 import { STREET_KEY } from './streetview'
 import {
-  ACTIONS, cutIn, describe, features, nextLight, reference, rel, step, stepOut, worldFromMap,
+  ACTIONS, cutIn, describe, features, jumpTo, nextLight, reference, rel, step, stepOut, worldFromMap,
   type Colour, type Physics, type RouteMap, type World,
 } from './driving'
 
@@ -45,13 +47,35 @@ export function DrivingStage({ net, route, off, send }: Props) {
   const [camera, setCamera] = useState<Camera>('front')
   // Google Street View for the car's own cameras, when a key is configured.
   const [street, setStreet] = useState(Boolean(STREET_KEY) && !FORCE_OPEN)
+  // Real street photos from Mapillary come first for the car's own cameras, when a token and
+  // the chosen photos are available.
+  // undefined while the chosen photos are still loading: no other view is tried meanwhile.
+  const [photos, setPhotos] = useState<PhotoTrack | null | undefined>(
+    MAPILLARY_TOKEN && !FORCE_OPEN ? undefined : null)
+  useEffect(() => {
+    if (!MAPILLARY_TOKEN || FORCE_OPEN) return
+    loadPhotoTrack().then(setPhotos)
+      .catch((e: Error) => { fellBack('Mapillary', e.message); setPhotos(null) })
+    loadDrives().then((found) => {
+      setDrives(found)
+      if (found.length) setDriveIx(0) // the smooth drive first; the whole route is a click away
+    }).catch((e: Error) => fellBack('Mapillary drives', e.message))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // One real dashcam drive, played like video, with the car kept on its stretch of road.
+  const [drives, setDrives] = useState<Drive[]>([])
+  const [driveIx, setDriveIx] = useState<number | null>(null)
+  const drive = driveIx === null ? null : drives[driveIx] ?? null
+  useEffect(() => {
+    if (drive) jumpTo(world.current, drive.start)
+  }, [drive])
   // Pause at a moment worth explaining: once braking is steady, or once the car has stopped.
   const [armed, setArmed] = useState<'brake' | 'stop' | null>(null)
   const braking = useRef(0) // consecutive ticks of braking
   const [, setFrame] = useState(0) // re-render the side panel a few times a second
   const ablation = useMemo(() => ({ nodes: new Set(off) }), [off])
-  const live = useRef({ paused, ablation, armed })
-  live.current = { paused, ablation, armed }
+  const live = useRef({ paused, ablation, armed, drive })
+  live.current = { paused, ablation, armed, drive }
 
   // Simulation: fixed 0.1 s steps on a timer, so it keeps time when the tab is not in front.
   useEffect(() => {
@@ -72,6 +96,10 @@ export function DrivingStage({ net, route, off, send }: Props) {
           }
         }
         step(w, physics, net, live.current.ablation, forced.current)
+        // Round the drive's stretch again once the car is past its end (and past the light
+        // that often stands there).
+        const d = live.current.drive
+        if (d && (w.car.at > d.end + 14 || w.car.at < d.start - 1)) jumpTo(w, d.start)
         w.tickAt = performance.now()
         braking.current = w.action === 2 ? braking.current + 1 : 0
         // Committed: braking for 0.8 s, not the first marginal tick of it; or standing still.
@@ -127,6 +155,7 @@ export function DrivingStage({ net, route, off, send }: Props) {
   }
   const restart = () => {
     world.current = worldFromMap(route, Math.floor(Math.random() * 1000))
+    if (drive) jumpTo(world.current, drive.start)
     forced.current.clear()
     forcedUntil.current.clear()
   }
@@ -134,7 +163,17 @@ export function DrivingStage({ net, route, off, send }: Props) {
   return (
     <div className="sim">
       <div className="stage city">
-        {street && camera !== 'chase'
+        {drive && camera === 'front'
+          ? <ClipCam world={world} map={route} drive={drive} forced={forced} tick={physics.tick_s}
+              physics={physics}
+              onFail={(why) => { fellBack('Mapillary drive', why); setDrives([]); setDriveIx(null) }} />
+          : photos === undefined && camera !== 'chase'
+          ? <div className="city-wrap"><div className="city-map photos" /></div>
+          : photos && camera !== 'chase'
+          ? <MapillaryCam world={world} map={route} track={photos} forced={forced}
+              tick={physics.tick_s} physics={physics} rear={camera === 'rear'}
+              onFail={(why) => { fellBack('Mapillary', why); setPhotos(null) }} />
+          : street && camera !== 'chase'
           ? <StreetCam world={world} map={route} forced={forced} tick={physics.tick_s}
               physics={physics} rear={camera === 'rear'}
               onFail={(why) => { fellBack('Street View', why); setStreet(false) }} />
@@ -145,7 +184,10 @@ export function DrivingStage({ net, route, off, send }: Props) {
           : <CityMap world={world} map={route} forced={forced} tick={physics.tick_s}
               physics={physics} camera={camera} />}
         <span className="cam-label" aria-hidden="true">
-          {CAMERA_NAMES[camera]} · {street && camera !== 'chase' ? 'STREET VIEW' : photo ? '3D CITY' : 'MAP'}
+          {CAMERA_NAMES[camera]} · {drive && camera === 'front' ? 'DASHCAM DRIVE'
+            : camera !== 'chase' && photos === undefined ? 'LOADING'
+            : camera !== 'chase' && photos ? 'STREET PHOTOS'
+            : street && camera !== 'chase' ? 'STREET VIEW' : photo ? '3D CITY' : 'MAP'}
         </span>
         {!photo && Boolean(ION_TOKEN) && !FORCE_OPEN && (
           <button type="button" className="retry-3d" title={photoWhy ?? 'The 3D city is off'}
@@ -157,6 +199,17 @@ export function DrivingStage({ net, route, off, send }: Props) {
               {c === 'front' ? 'Front camera' : c === 'rear' ? 'Rear camera' : 'Chase view'}</button>
           ))}
         </div>
+        {drives.length > 0 && (
+          <div className="drives" role="group" aria-label="Street photos">
+            {drives.map((d, k) => (
+              <button key={d.seq} type="button" aria-pressed={driveIx === k}
+                title={`${Math.round(d.end - d.start)} m of one dashcam drive, ${d.date}`}
+                onClick={() => setDriveIx(k)}>Drive {k + 1} · {Math.round(d.seconds)} s</button>
+            ))}
+            <button type="button" aria-pressed={driveIx === null} onClick={() => setDriveIx(null)}
+              title="Photos for every 5 m of the route, from many drives">Whole route</button>
+          </div>
+        )}
         <div className="hud" aria-hidden="true">
           <span className="speed">{Math.round(w.car.speed * 3.6)}<small>km/h</small></span>
           <span className={`act ${act}`}>{act}</span>
