@@ -59,10 +59,10 @@ const LABELS: Record<string, string> = { car: 'car', bus: 'bus', truck: 'truck',
 // a real one of about the size it would have at the simulation's distance, `ahead(s)` metres
 // from where the photo was taken. `unmatched`: the network's objects with no such match.
 export function photoBoxes(id: string, objects: Detected[], pw: number, ph: number, used: Seen[],
-  ahead: (s: number) => number): { boxes: Box[]; unmatched: Seen[] } {
+  ahead: (s: number) => number, hfov = HFOV): { boxes: Box[]; unmatched: Seen[] } {
   const centre = (b: Detected['box']) => (b[0] + b[2]) / 2
   const area = (b: Detected['box']) => (b[2] - b[0]) * (b[3] - b[1])
-  const fpx = (pw / 2) / Math.tan((HFOV / 2) * (Math.PI / 180))
+  const fpx = (pw / 2) / Math.tan((hfov / 2) * (Math.PI / 180))
   const taken = new Map<number, Seen>()
   const unmatched: Seen[] = []
   for (const u of used) {
@@ -102,11 +102,11 @@ export function photoBoxes(id: string, objects: Detected[], pw: number, ph: numb
 }
 
 // The network's objects a photo has no match for: small markers where they would be, in a
-// W × H view looking along `view` degrees from the car at `carS`.
+// W × H view looking along `view` degrees from the car at `carS`, with a focal length of `f`
+// pixels and the horizon `horizon` of the way down.
 export function simMarkers(map: RouteMap, carS: number, view: number, W: number, H: number,
-  unmatched: Seen[]): Box[] {
-  const f = (W / 2) / Math.tan((HFOV / 2) * (Math.PI / 180))
-  const horizon = H * 0.48
+  unmatched: Seen[], f = (W / 2) / Math.tan((HFOV / 2) * (Math.PI / 180)), horizon = H * 0.48): Box[] {
+  const half = (Math.atan(W / 2 / f) * 180) / Math.PI
   const me = poseAt(map, carS, 6)
   const [cLng, cLat] = offset(me, 0, LANE)
   const extra: Box[] = []
@@ -117,7 +117,7 @@ export function simMarkers(map: RouteMap, carS: number, view: number, W: number,
     const north = (lat - cLat) * 110_540
     const rel = ((Math.atan2(east, north) * 180) / Math.PI - view + 540) % 360 - 180
     const dist = Math.hypot(east, north)
-    if (dist < 3 || Math.abs(rel) > HFOV / 2 + 8) continue
+    if (dist < 3 || Math.abs(rel) > half + 8) continue
     const forward = dist * Math.cos((rel * Math.PI) / 180)
     extra.push({ key: o.key, kind: o.kind, x: W / 2 + f * Math.tan((rel * Math.PI) / 180),
       y: horizon + (f * (CAMERA_HEIGHT - o.base)) / forward, w: (f * o.width) / forward,

@@ -17,6 +17,7 @@ import { drawBoxes, seen } from './perception'
 export interface DriveFrame { id: string; s: number; angle: number; t: number; objects?: Detected[] }
 export interface Drive {
   seq: string; start: number; end: number; seconds: number; by: string; date: string
+  hfov?: number // degrees across the camera's full frame
   frames: DriveFrame[]
 }
 
@@ -31,8 +32,13 @@ const AHEAD = 70 // frames loaded ahead of the car: about 50 m
 const BEHIND = 12 // frames kept behind it
 const BATCH = 35 // frame ids per request for image addresses
 const PUSH = 0.014 // how much nearer the next frame's scene is: a push-in as the car moves up
-const ORIGIN = 0.46 // the vanishing point, as a fraction of the height
-const HFOV = 72
+// The drives were filmed on a wide lens from the top deck of a bus. Shown as a dashcam sees:
+// cropped in to a dashcam's narrower view, which drops the bus's window frame and the steep
+// view down onto the road, with the horizon where a car's camera has it and the car's bonnet
+// along the foot of the picture.
+const CROP = 1.42 // how far in from the photo's own view
+const SOURCE_HORIZON = 0.52 // where the horizon is in the photos, as a fraction of the height
+const HORIZON = 0.47 // and where a dashcam has it
 
 interface Props {
   world: RefObject<World>
@@ -185,15 +191,16 @@ export function ClipCam({ world, map, drive, forced, tick, physics, onFail }: Pr
       if (!base) { ctx.fillStyle = '#1d2128'; ctx.fillRect(0, 0, W, H); return }
 
       const bearing = poseAt(map, carS, 12).bearing
-      const fpx = (W / 2) / Math.tan((HFOV / 2) * (Math.PI / 180))
+      const hfov = drive.hfov ?? 89
       const rectFor = (f: DriveFrame, zoom: number) => {
         const img = images.get(f.id)!
-        const k = Math.max(W / img.naturalWidth, H / img.naturalHeight) * zoom
+        const k = Math.max(W / img.naturalWidth, H / img.naturalHeight) * zoom * CROP
         const dw = img.naturalWidth * k
         const dh = img.naturalHeight * k
+        const fpx = (dw / 2) / Math.tan((hfov / 2) * (Math.PI / 180))
         const diff = ((f.angle - bearing + 540) % 360) - 180
-        const pan = Math.max(-0.08 * W, Math.min(0.08 * W, -fpx * Math.tan((diff * Math.PI) / 180)))
-        return { img, x: W / 2 - dw / 2 + pan, y: H * ORIGIN - dh * ORIGIN, w: dw, h: dh }
+        const pan = Math.max(-0.1 * W, Math.min(0.1 * W, -fpx * Math.tan((diff * Math.PI) / 180)))
+        return { img, x: W / 2 - dw / 2 + pan, y: H * HORIZON - dh * SOURCE_HORIZON, w: dw, h: dh, fpx }
       }
       const a = rectFor(base, 1.02 * (1 + PUSH * (base === here ? t : 1)))
       ctx.globalAlpha = 1
@@ -216,9 +223,9 @@ export function ClipCam({ world, map, drive, forced, tick, physics, onFail }: Pr
       }
       const used = seen(w, physics, forced.current ?? undefined).filter((o) => o.used)
       const { boxes: real, unmatched } = photoBoxes(shownFrame.id, shownFrame.objects ?? [],
-        shown.w, shown.h, used, (s) => s - shownFrame.s)
+        shown.w, shown.h, used, (s) => s - shownFrame.s, hfov)
       drawBoxes(boxes.current, real)
-      drawBoxes(markers.current, simMarkers(map, carS, bearing, W, H, unmatched))
+      drawBoxes(markers.current, simMarkers(map, carS, bearing, W, H, unmatched, shown.fpx, H * HORIZON))
 
       const p = `${Math.round(((shownFrame.t) / 1000))} s of ${Math.round(drive.seconds)} s`
       if (p !== lastProgress) { lastProgress = p; setProgress(p) }
@@ -232,6 +239,8 @@ export function ClipCam({ world, map, drive, forced, tick, physics, onFail }: Pr
       <div ref={host} className="city-map photos drive" role="img"
         aria-label={`A real dashcam drive along ${map.name}, from the car's front camera`}>
         <canvas ref={canvas} />
+        <div className="drive-shade" />
+        <div className="drive-bonnet" />
         <div ref={plate} className="plate drive-plate">
           <div ref={boxes} className="boxes perception real" />
         </div>

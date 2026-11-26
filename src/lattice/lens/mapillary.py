@@ -459,6 +459,12 @@ def main(argv: list[str] | None = None) -> int:
 def write_drives(route: dict, photos: dict[str, dict], out: Path, token: str) -> None:
     found = drives(route, photos)
     attach_detections([d["frames"] for d in found], token)
+    for d in found:  # the lens's width of view, from Mapillary's camera calibration
+        first = d["frames"][0]["id"]
+        params = _get(f"https://graph.mapillary.com/{first}?fields=camera_parameters",
+                      token).get("camera_parameters") or []
+        if params and params[0] > 0:  # focal length, as a fraction of the frame's width
+            d["hfov"] = round(math.degrees(2 * math.atan(1 / (2 * params[0]))), 1)
     out.write_text(json.dumps({"source": "Mapillary contributors, CC BY-SA 4.0", "drives": found},
                               separators=(",", ":")) + "\n")
     for d in found:

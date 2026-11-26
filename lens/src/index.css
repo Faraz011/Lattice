@@ -509,23 +509,33 @@ body.console-page { background: #15171b; }
 .perception.real .det:not(.used) span { opacity: 0.85; }
 .perception.real .det.used { border-width: 3px; box-shadow: 0 0 0 1px rgba(0,0,0,0.35); }
 .perception.real .det.used span { font-size: 11.5px; font-weight: 700; }
-.city-map.photos.night .photo-frame img { filter: brightness(0.68) saturate(0.62) contrast(1.1) hue-rotate(10deg); }
+.city-map.photos .photo-frame img { filter: brightness(1.1) contrast(1.06) saturate(1.12); }
+.city-map.photos.night .photo-frame img { filter: brightness(0.82) saturate(0.7) contrast(1.08) hue-rotate(8deg); }
 .city-map.photos.night .plate::before { content: ''; position: absolute; inset: 0; pointer-events: none;
   z-index: 1; background: radial-gradient(ellipse 55% 38% at 50% 100%, rgba(255, 236, 190, 0.22), transparent 70%),
-    linear-gradient(rgba(14, 22, 48, 0.24), rgba(14, 22, 48, 0.06)); }
+    linear-gradient(rgba(14, 22, 48, 0.16), rgba(14, 22, 48, 0.03)); }
 .photo-frame .boxes { z-index: 2; }
-.city-map.photos.rain .photo-frame img { filter: saturate(0.75) brightness(0.9) contrast(0.95); }
-.city-map.photos.night.rain .photo-frame img { filter: brightness(0.5) saturate(0.5) contrast(1.08); }
+.city-map.photos.rain .photo-frame img { filter: saturate(0.8) brightness(0.98) contrast(0.97); }
+.city-map.photos.night.rain .photo-frame img { filter: brightness(0.7) saturate(0.6) contrast(1.06); }
 
 /* ---- one dashcam drive, played like video ---- */
 .city-map.photos.drive canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .drive-plate { position: absolute; pointer-events: none; }
 .drive-plate .boxes { position: absolute; inset: 0; z-index: 2; }
-.city-map.photos.drive.night canvas { filter: brightness(0.68) saturate(0.62) contrast(1.1) hue-rotate(10deg); }
-.city-map.photos.drive.rain canvas { filter: saturate(0.75) brightness(0.9) contrast(0.95); }
-.city-map.photos.drive.night.rain canvas { filter: brightness(0.5) saturate(0.5) contrast(1.08); }
+.city-map.photos.drive canvas { filter: brightness(1.12) contrast(1.08) saturate(1.14); }
+.city-map.photos.drive.night canvas { filter: brightness(0.84) saturate(0.7) contrast(1.1) hue-rotate(8deg); }
+.city-map.photos.drive.rain canvas { filter: saturate(0.82) brightness(1) contrast(0.98); }
+.city-map.photos.drive.night.rain canvas { filter: brightness(0.72) saturate(0.6) contrast(1.06); }
 .drives { position: absolute; top: 2.85rem; right: 0.75rem; z-index: 3; display: inline-flex; border-radius: 4px;
   overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
 .drives button { border: 0; border-radius: 0; font-size: 0.75rem; padding: 0.25rem 0.6rem;
   background: rgba(20,26,40,0.72); color: #e8ecf4; }
 .drives button[aria-pressed='true'] { background: #f6f8f3; color: var(--ink); }
+
+/* The car's bonnet at the foot of the dashcam drive: the camera sits behind the windscreen. */
+.drive-bonnet { position: absolute; left: -12%; right: -12%; bottom: -1px; height: 15%; z-index: 1; pointer-events: none;
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  background: radial-gradient(ellipse 60% 120% at 50% 0%, rgba(150, 160, 178, 0.55), rgba(48, 54, 66, 0.96) 38%, #161a21 80%);
+  box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.22), 0 -10px 24px rgba(0, 0, 0, 0.35); }
+.drive-shade { position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: radial-gradient(ellipse 85% 75% at 50% 46%, transparent 62%, rgba(0, 0, 0, 0.28)); }
