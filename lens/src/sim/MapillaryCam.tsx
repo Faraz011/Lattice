@@ -21,7 +21,7 @@ const LANE = -1.9
 const AHEAD = 10 // photos whose images are loaded ahead of the car
 const FADE_MS = 650
 
-interface Detected { kind: string; box: [number, number, number, number] }
+export interface Detected { kind: string; box: [number, number, number, number] }
 export interface Photo {
   s: number; id: string; lng: number; lat: number; angle: number; seq: string; by: string
   date: string; objects?: Detected[]
@@ -53,6 +53,78 @@ interface Frame { el: HTMLDivElement; img: HTMLImageElement; plate: HTMLDivEleme
 const VEHICLES = new Set(['car', 'bus', 'truck', 'vehicle', 'motorcycle'])
 const LABELS: Record<string, string> = { car: 'car', bus: 'bus', truck: 'truck', vehicle: 'vehicle',
   motorcycle: 'motorbike', person: 'person', cyclist: 'cyclist', rider: 'rider', light: 'traffic light' }
+
+// Boxes around a photo's real objects, on a plate pw × ph pixels; the ones the network's inputs
+// stand for carry the simulation's reading. A car or person the network sees is matched only to
+// a real one of about the size it would have at the simulation's distance, `ahead(s)` metres
+// from where the photo was taken. `unmatched`: the network's objects with no such match.
+export function photoBoxes(id: string, objects: Detected[], pw: number, ph: number, used: Seen[],
+  ahead: (s: number) => number): { boxes: Box[]; unmatched: Seen[] } {
+  const centre = (b: Detected['box']) => (b[0] + b[2]) / 2
+  const area = (b: Detected['box']) => (b[2] - b[0]) * (b[3] - b[1])
+  const fpx = (pw / 2) / Math.tan((HFOV / 2) * (Math.PI / 180))
+  const taken = new Map<number, Seen>()
+  const unmatched: Seen[] = []
+  for (const u of used) {
+    const want = u.kind === 'car' ? (o: Detected) => VEHICLES.has(o.kind) && Math.abs(centre(o.box) - 0.5) < 0.22
+      : u.kind === 'pedestrian' ? (o: Detected) => o.kind === 'person' && Math.abs(centre(o.box) - 0.5) < 0.35
+      : (o: Detected) => o.kind === 'light'
+    // How far a detection's height is from the height the object would have: 0 is exact.
+    const d = ahead(u.s)
+    const sized = (u.kind === 'car' || u.kind === 'pedestrian') && d > 1
+    const misfit = (o: Detected) => {
+      if (!sized) return -area(o.box) // lights: the largest
+      const r = ((o.box[3] - o.box[1]) * ph) / ((fpx * u.height) / d)
+      return r > 0.5 && r < 2.4 ? Math.abs(Math.log(r)) : Infinity
+    }
+    let best = -1
+    let bestMisfit = Infinity
+    objects.forEach((o, i) => {
+      if (taken.has(i) || !want(o)) return
+      const m = misfit(o)
+      if (m < bestMisfit) { best = i; bestMisfit = m }
+    })
+    if (best >= 0) taken.set(best, u)
+    else unmatched.push(u)
+  }
+  const boxes: Box[] = objects.map((o, i) => {
+    const u = taken.get(i)
+    const kind: Kind = u ? u.kind : o.kind === 'light' ? 'green'
+      : o.kind === 'person' || o.kind === 'cyclist' || o.kind === 'rider' ? 'pedestrian' : 'car'
+    const [x0, y0, x1, y1] = o.box
+    return { key: `${id}${i}`, kind: o.kind === 'light' && !u ? 'light-real' as Kind : kind,
+      x: ((x0 + x1) / 2) * pw, y: y1 * ph, w: (x1 - x0) * pw, h: (y1 - y0) * ph,
+      // A light's colour is the simulation's, not the photo's: the tag says so.
+      label: u ? (o.kind === 'light' ? `${u.label} (sim)` : u.label) : LABELS[o.kind] ?? o.kind,
+      used: Boolean(u) }
+  })
+  return { boxes, unmatched }
+}
+
+// The network's objects a photo has no match for: small markers where they would be, in a
+// W × H view looking along `view` degrees from the car at `carS`.
+export function simMarkers(map: RouteMap, carS: number, view: number, W: number, H: number,
+  unmatched: Seen[]): Box[] {
+  const f = (W / 2) / Math.tan((HFOV / 2) * (Math.PI / 180))
+  const horizon = H * 0.48
+  const me = poseAt(map, carS, 6)
+  const [cLng, cLat] = offset(me, 0, LANE)
+  const extra: Box[] = []
+  for (const o of unmatched) {
+    const p = poseAt(map, o.s, 6)
+    const [lng, lat] = offset(p, 0, o.right)
+    const east = (lng - cLng) * 111_320 * Math.cos((cLat * Math.PI) / 180)
+    const north = (lat - cLat) * 110_540
+    const rel = ((Math.atan2(east, north) * 180) / Math.PI - view + 540) % 360 - 180
+    const dist = Math.hypot(east, north)
+    if (dist < 3 || Math.abs(rel) > HFOV / 2 + 8) continue
+    const forward = dist * Math.cos((rel * Math.PI) / 180)
+    extra.push({ key: o.key, kind: o.kind, x: W / 2 + f * Math.tan((rel * Math.PI) / 180),
+      y: horizon + (f * (CAMERA_HEIGHT - o.base)) / forward, w: (f * o.width) / forward,
+      h: (f * o.height) / forward, label: o.label, used: true })
+  }
+  return extra
+}
 
 export function MapillaryCam({ world, map, track, forced, tick, physics, rear, onFail }: Props) {
   const host = useRef<HTMLDivElement>(null)
@@ -128,35 +200,10 @@ export function MapillaryCam({ world, map, track, forced, tick, physics, rear, o
       return { pw, ph }
     }
 
-    // Boxes around the photo's real objects; the ones the network's inputs stand for carry
-    // the simulation's reading. Returns the network's objects the photo had no match for.
     const label = (f: Frame, p: Photo, pw: number, ph: number, used: Seen[]): Seen[] => {
-      const objects = p.objects ?? []
-      const centre = (b: Detected['box']) => (b[0] + b[2]) / 2
-      const area = (b: Detected['box']) => (b[2] - b[0]) * (b[3] - b[1])
-      const taken = new Map<number, Seen>()
-      const unmatched: Seen[] = []
-      for (const u of used) {
-        const want = u.kind === 'car' ? (o: Detected) => VEHICLES.has(o.kind) && Math.abs(centre(o.box) - 0.5) < 0.22
-          : u.kind === 'pedestrian' ? (o: Detected) => o.kind === 'person' && Math.abs(centre(o.box) - 0.5) < 0.35
-          : (o: Detected) => o.kind === 'light'
-        let best = -1
-        objects.forEach((o, i) => {
-          if (!taken.has(i) && want(o) && (best < 0 || area(o.box) > area(objects[best].box))) best = i
-        })
-        if (best >= 0) taken.set(best, u)
-        else unmatched.push(u)
-      }
-      const boxes: Box[] = objects.map((o, i) => {
-        const u = taken.get(i)
-        const kind: Kind = u ? u.kind : o.kind === 'light' ? 'green'
-          : o.kind === 'person' || o.kind === 'cyclist' || o.kind === 'rider' ? 'pedestrian' : 'car'
-        const [x0, y0, x1, y1] = o.box
-        return { key: `${p.id}${i}`, kind: o.kind === 'light' && !u ? 'light-real' as Kind : kind,
-          x: ((x0 + x1) / 2) * pw, y: y1 * ph, w: (x1 - x0) * pw, h: (y1 - y0) * ph,
-          // A light's colour is the simulation's, not the photo's: the tag says so.
-          label: u ? (o.kind === 'light' ? `${u.label} (sim)` : u.label) : LABELS[o.kind] ?? o.kind,
-          used: Boolean(u) }
+      const { boxes, unmatched } = photoBoxes(p.id, p.objects ?? [], pw, ph, used, (s) => {
+        const d = s - p.s
+        return d < -L / 2 ? d + L : d > L / 2 ? d - L : d
       })
       drawBoxes(f.boxes, boxes)
       return unmatched
@@ -233,25 +280,7 @@ export function MapillaryCam({ world, map, track, forced, tick, physics, rear, o
       const c = `${shown?.by ? `photo ${shown.by}, ` : ''}${shown?.date ?? ''}`
       if (c !== lastCredit) { lastCredit = c; setCredit(c) }
 
-      // The network's objects the photo has no match for: small markers where they would be.
-      const horizon = H * 0.48
-      const me = poseAt(map, carS, 6)
-      const [cLng, cLat] = offset(me, 0, LANE)
-      const extra: Box[] = []
-      for (const o of unmatched) {
-        const p = poseAt(map, o.s, 6)
-        const [lng, lat] = offset(p, 0, o.right)
-        const east = (lng - cLng) * 111_320 * Math.cos((cLat * Math.PI) / 180)
-        const north = (lat - cLat) * 110_540
-        const rel = ((Math.atan2(east, north) * 180) / Math.PI - view + 540) % 360 - 180
-        const dist = Math.hypot(east, north)
-        if (dist < 3 || Math.abs(rel) > HFOV / 2 + 8) continue
-        const forward = dist * Math.cos((rel * Math.PI) / 180)
-        extra.push({ key: o.key, kind: o.kind, x: W / 2 + f * Math.tan((rel * Math.PI) / 180),
-          y: horizon + (f * (CAMERA_HEIGHT - o.base)) / forward, w: (f * o.width) / forward,
-          h: (f * o.height) / forward, label: o.label, used: true })
-      }
-      drawBoxes(markers.current, extra)
+      drawBoxes(markers.current, simMarkers(map, carS, view, W, H, unmatched))
     }
     raf = requestAnimationFrame(draw)
     return () => { alive = false; cancelAnimationFrame(raf) }

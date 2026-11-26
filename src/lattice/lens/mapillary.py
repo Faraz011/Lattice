@@ -6,7 +6,11 @@ the rear camera): close to the road, pointing along it, recent, and from the sam
 the photo before where possible, so the view does not jump between photographers. It stores
 only photo ids, positions and credits; the browser fetches the images themselves.
 
+It also finds the longest continuous dashcam drives on the route (london-drives.json): every
+frame of one drive in order, which the car's front camera plays like video along that stretch.
+
     uv run python -m lattice.lens.mapillary        # reads VITE_MAPILLARY_TOKEN from lens/.env.local
+    uv run python -m lattice.lens.mapillary --drives-only
 """
 
 import argparse
@@ -219,6 +223,105 @@ def choose(route: dict, photos: dict[str, dict], facing: float, light: str = "da
     return chosen
 
 
+DRIVE_MIN_M = 200.0  # a drive shorter than this is over before it is worth watching
+DRIVE_FRAMES = 150  # and one with fewer frames than this is a slideshow, not a drive
+
+
+def _project(route: dict, lng: float, lat: float) -> tuple[float, float]:
+    """(distance from the route in metres, metres along it) of the nearest route point."""
+    lat0 = route["route"][0][1]
+    q = _metres(lng, lat, lat0)
+    pts = [_metres(a[0], a[1], lat0) for a in route["route"]]
+    best = (math.inf, 0.0)
+    for i, (a, b) in enumerate(zip(pts, pts[1:], strict=False)):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        seg = dx * dx + dy * dy
+        t = 0.0 if seg == 0 else max(0.0, min(1.0, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / seg))
+        d = math.hypot(q[0] - (a[0] + t * dx), q[1] - (a[1] + t * dy))
+        if d < best[0]:
+            best = (d, route["cumulative_m"][i] + t * math.sqrt(seg))
+    return best
+
+
+def _smooth(values: list[float], half: int) -> list[float]:
+    """A centred moving average, narrowed at the ends so a steady run stays exactly as it is."""
+    out = []
+    for i in range(len(values)):
+        k = min(half, i, len(values) - 1 - i)
+        out.append(sum(values[i - k:i + k + 1]) / (2 * k + 1))
+    return out
+
+
+def drives(route: dict, photos: dict[str, dict], count: int = 2) -> list[dict]:
+    """The longest, densest runs of one dashcam drive along the route, frame by frame.
+
+    Dashcam apps upload a frame every metre or less: played in order, one such run is close to
+    video. A run is the photos of one daylight sequence, in the order taken, that stay on the
+    route, face along it and move forward along it. Positions along the route are smoothed and
+    made to only go forward, so playback does not jitter with the GPS; frames taken while the
+    car stood still are dropped, as the simulation decides when its car stands still.
+    """
+    by_seq: dict[str, list[dict]] = {}
+    for ph in photos.values():
+        if ph.get("is_pano") or not ph.get("sequence") or lighting(ph) != "day":
+            continue
+        by_seq.setdefault(ph["sequence"], []).append(ph)
+    runs = []
+    for items in by_seq.values():
+        if len(items) < DRIVE_FRAMES:
+            continue
+        items.sort(key=lambda ph: ph["captured_at"])
+        run: list[tuple[dict, float]] = []
+        best: list[tuple[dict, float]] = []
+        for ph in items:
+            d, s = _project(route, *ph["computed_geometry"]["coordinates"])
+            off = abs((ph["computed_compass_angle"] - _pose(route, s)[2] + 540) % 360 - 180)
+            on = d < 9 and off < 35
+            if on and (not run or 0 <= s - run[-1][1] < 25):
+                run.append((ph, s))
+                continue
+            if len(run) > len(best):
+                best = run
+            run = [(ph, s)] if on else []
+        best = max(best, run, key=len)
+        if len(best) >= DRIVE_FRAMES and best[-1][1] - best[0][1] >= DRIVE_MIN_M:
+            runs.append(best)
+    runs.sort(key=len, reverse=True)
+
+    chosen: list[dict] = []
+    for run in runs:
+        start, end = run[0][1], run[-1][1]
+        if any(start < c["end"] and c["start"] < end for c in chosen):
+            continue  # the same stretch from another upload of the same drive
+        moving: list[tuple[dict, float]] = []
+        for ph, s in run:
+            if not moving or s - moving[-1][1] >= 0.25:  # not standing still
+                moving.append((ph, s))
+        along = _smooth([s for _, s in moving], 6)
+        angles = _smooth([ph["computed_compass_angle"] for ph, _ in moving], 4)
+        frames, last = [], -math.inf
+        t0 = moving[0][0]["captured_at"]
+        for (ph, _), s, angle in zip(moving, along, angles, strict=True):
+            if s - last < 0.3:
+                continue
+            last = s
+            frames.append({"id": ph["id"], "s": round(s, 2), "angle": round(angle, 1),
+                           "t": ph["captured_at"] - t0})
+        first = run[0][0]
+        chosen.append({
+            "seq": first["sequence"],
+            "start": round(frames[0]["s"], 1),
+            "end": round(frames[-1]["s"], 1),
+            "seconds": round(frames[-1]["t"] / 1000, 1),
+            "by": (first.get("creator") or {}).get("username", ""),
+            "date": datetime.fromtimestamp(t0 / 1000, UTC).strftime("%Y-%m"),
+            "frames": frames,
+        })
+        if len(chosen) == count:
+            break
+    return sorted(chosen, key=lambda c: c["start"])
+
+
 KEEP = {  # Mapillary's detection classes worth boxing, by what we call them
     "object--vehicle--car": "car", "object--vehicle--bus": "bus",
     "object--vehicle--truck": "truck", "object--vehicle--motorcycle": "motorcycle",
@@ -314,6 +417,9 @@ def main(argv: list[str] | None = None) -> int:
     # again about twenty minutes.
     parser.add_argument("--cache", type=Path, default=Path("data/mapillary-photos.json"))
     parser.add_argument("--refresh", action="store_true", help="search Mapillary again")
+    parser.add_argument("--drives", type=Path, default=Path("lens/public/maps/london-drives.json"))
+    parser.add_argument("--drives-only", action="store_true",
+                        help="only find the continuous drives, from the cached search")
     args = parser.parse_args(argv)
     route = json.loads(args.route.read_text())
     if args.cache.exists() and not args.refresh:
@@ -323,6 +429,9 @@ def main(argv: list[str] | None = None) -> int:
         photos = fetch(route, _token(args.env))
         args.cache.parent.mkdir(parents=True, exist_ok=True)
         args.cache.write_text(json.dumps(photos))
+    if args.drives_only:
+        write_drives(route, photos, args.drives, _token(args.env))
+        return 0
     tracks = {f"{side}_{light}": choose(route, photos, facing, light)
               for side, facing in (("front", 0), ("rear", 180)) for light in ("day", "night")}
     cover = {k: round(coverage(route, v), 3) for k, v in tracks.items()}
@@ -343,7 +452,19 @@ def main(argv: list[str] | None = None) -> int:
     args.out.write_text(json.dumps(data, separators=(",", ":")) + "\n")
     print(f"{len(photos)} photos near the route. Coverage: "
           + ", ".join(f"{k} {v:.0%}" for k, v in cover.items()) + f" -> {args.out}")
+    write_drives(route, photos, args.drives, _token(args.env))
     return 0
+
+
+def write_drives(route: dict, photos: dict[str, dict], out: Path, token: str) -> None:
+    found = drives(route, photos)
+    attach_detections([d["frames"] for d in found], token)
+    out.write_text(json.dumps({"source": "Mapillary contributors, CC BY-SA 4.0", "drives": found},
+                              separators=(",", ":")) + "\n")
+    for d in found:
+        print(f"drive at {d['start']:.0f}-{d['end']:.0f} m: {len(d['frames'])} frames, "
+              f"{d['seconds']} s, {d['date']}")
+    print(f"-> {out}")
 
 
 if __name__ == "__main__":

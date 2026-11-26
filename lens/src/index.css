@@ -266,8 +266,8 @@ button.quiet { border-color: transparent; text-decoration: underline; }
 /* ---- Street View ---- */
 .city-map.street { background: #2a2f3a; }
 .city-map.street canvas { display: block; width: 100%; height: 100%; }
-.street-credit { position: absolute; right: 0.5rem; bottom: 0.35rem; z-index: 3; font-size: 0.6875rem; color: #fff;
-  text-shadow: 0 1px 2px #000; margin: 0; }
+.street-credit { position: absolute; right: 0.5rem; bottom: 1.5rem; z-index: 3; font-size: 0.6875rem; color: #fff;
+  text-shadow: 0 1px 2px #000; margin: 0; max-width: 62%; text-align: right; line-height: 1.35; }
 .street-credit strong { font-weight: 700; letter-spacing: 0.01em; }
 .sim-markers .det { border-style: dashed; background: rgba(120, 220, 255, 0.08); }
 .sim-markers .det.used { border-style: solid; background: rgba(255, 255, 255, 0.1); }
@@ -516,3 +516,16 @@ body.console-page { background: #15171b; }
 .photo-frame .boxes { z-index: 2; }
 .city-map.photos.rain .photo-frame img { filter: saturate(0.75) brightness(0.9) contrast(0.95); }
 .city-map.photos.night.rain .photo-frame img { filter: brightness(0.5) saturate(0.5) contrast(1.08); }
+
+/* ---- one dashcam drive, played like video ---- */
+.city-map.photos.drive canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.drive-plate { position: absolute; pointer-events: none; }
+.drive-plate .boxes { position: absolute; inset: 0; z-index: 2; }
+.city-map.photos.drive.night canvas { filter: brightness(0.68) saturate(0.62) contrast(1.1) hue-rotate(10deg); }
+.city-map.photos.drive.rain canvas { filter: saturate(0.75) brightness(0.9) contrast(0.95); }
+.city-map.photos.drive.night.rain canvas { filter: brightness(0.5) saturate(0.5) contrast(1.08); }
+.drives { position: absolute; top: 2.85rem; right: 0.75rem; z-index: 3; display: inline-flex; border-radius: 4px;
+  overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+.drives button { border: 0; border-radius: 0; font-size: 0.75rem; padding: 0.25rem 0.6rem;
+  background: rgba(20,26,40,0.72); color: #e8ecf4; }
+.drives button[aria-pressed='true'] { background: #f6f8f3; color: var(--ink); }
